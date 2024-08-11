@@ -603,14 +603,34 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
 
             with sqlite3.connect(config.REPO_ROOT / "backend" / "fts.db") as conn:
                 c = conn.cursor()
+                # Check if domain column exists for backwards-compatible domain filtering
+                use_domain = False
+                if domain_filter and domain_filter.lower() not in ('all', ''):
+                    try:
+                        c.execute("PRAGMA table_info(chunks)")
+                        cols = [r[1] for r in c.fetchall()]
+                        if "domain" in cols:
+                            use_domain = True
+                    except Exception:
+                        use_domain = False
+
                 # First attempt: strict AND — all terms must appear
-                c.execute('''
-                    SELECT parent_text, source_file, page_number
-                    FROM chunks
-                    WHERE chunks MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                ''', (fts_and_query, search_k))
+                if use_domain:
+                    c.execute('''
+                        SELECT parent_text, source_file, page_number
+                        FROM chunks
+                        WHERE chunks MATCH ? AND domain = ?
+                        ORDER BY rank
+                        LIMIT ?
+                    ''', (fts_and_query, domain_filter.lower(), search_k))
+                else:
+                    c.execute('''
+                        SELECT parent_text, source_file, page_number
+                        FROM chunks
+                        WHERE chunks MATCH ?
+                        ORDER BY rank
+                        LIMIT ?
+                    ''', (fts_and_query, search_k))
                 rows = c.fetchall()
 
                 # Fallback: if AND returned nothing (e.g. very rare multi-word combo),
@@ -618,13 +638,22 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
                 if not rows and len(raw_tokens) > 1:
                     fts_or_query = " ".join(raw_tokens)
                     logger.info(f"[FTS5] AND query returned 0 results — retrying with OR fallback")
-                    c.execute('''
-                        SELECT parent_text, source_file, page_number
-                        FROM chunks
-                        WHERE chunks MATCH ?
-                        ORDER BY rank
-                        LIMIT ?
-                    ''', (fts_or_query, search_k))
+                    if use_domain:
+                        c.execute('''
+                            SELECT parent_text, source_file, page_number
+                            FROM chunks
+                            WHERE chunks MATCH ? AND domain = ?
+                            ORDER BY rank
+                            LIMIT ?
+                        ''', (fts_or_query, domain_filter.lower(), search_k))
+                    else:
+                        c.execute('''
+                            SELECT parent_text, source_file, page_number
+                            FROM chunks
+                            WHERE chunks MATCH ?
+                            ORDER BY rank
+                            LIMIT ?
+                        ''', (fts_or_query, search_k))
                     rows = c.fetchall()
 
                 seen_sqlite_parents = set()

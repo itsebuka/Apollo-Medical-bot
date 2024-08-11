@@ -15,7 +15,7 @@ export default function ApolloLogo({ size = 32, animated = false }) {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={animated ? 'animate-pulse text-neon' : 'text-neon'}
+      className={animated ? 'animate-pulse transition-opacity duration-300' : 'transition-opacity duration-300'}
       aria-label="Apollo Medical System Logo"
     >
       {/* Staff */}

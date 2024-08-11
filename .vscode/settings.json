@@ -1,0 +1,11 @@
+{
+  "css.lint.unknownAtRules": "ignore",
+  "python.defaultInterpreterPath": "c:\\Users\\Ebuka Eleogu\\Ebuka-s-adtc-2026\\backend\\venv\\Scripts\\python.exe",
+  "python.analysis.venvPath": "c:\\Users\\Ebuka Eleogu\\Ebuka-s-adtc-2026\\backend",
+  "python.analysis.venv": "venv",
+  "python.analysis.extraPaths": [
+    "c:\\Users\\Ebuka Eleogu\\Ebuka-s-adtc-2026\\backend",
+    "c:\\Users\\Ebuka Eleogu\\Ebuka-s-adtc-2026\\backend\\venv\\Lib\\site-packages"
+  ],
+  "python.terminal.activateEnvironment": true
+}

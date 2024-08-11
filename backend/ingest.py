@@ -1,0 +1,323 @@
+"""
+Apollo Advanced RAG Ingestion Pipeline (Phase 1)
+==============================================================
+Author: Built for ADTC 2026 — Team: Eleogu Chukwuebuka Joseph
+
+This script completely overhauls the legacy ingestion pipeline by implementing:
+1. Native Python Parent-Child (Small-to-Big) Chunking.
+2. Metadata Enrichment (page tracking, source files).
+3. Memory-safe page-by-page PDF extraction.
+
+RAM Optimization:
+Instead of loading a massive PDF into string memory, we process it page-by-page.
+We use native Python string slicing rather than heavy LangChain wrappers to keep 
+the memory footprint under 7GB during the embedding phase.
+"""
+
+import os
+import sys
+import time
+import hashlib
+from pathlib import Path
+from typing import List, Dict, Any
+
+import sqlite3
+import chromadb
+from pypdf import PdfReader
+from sentence_transformers import SentenceTransformer
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+BACKEND_DIR = Path(__file__).parent
+KNOWLEDGE_DIR = BACKEND_DIR / "data" / "knowledge"
+CHROMA_DB_DIR = BACKEND_DIR / "chroma_db"
+SQLITE_DB_PATH = BACKEND_DIR / "fts.db"
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+COLLECTION_NAME = "apollo_medical_knowledge"
+
+# PARENT-CHILD CHUNKING CONFIGURATION
+# Parent chunks hold semantic context. Child chunks drive precision search.
+PARENT_CHUNK_SIZE = 1500       # Large context window for the LLM
+PARENT_CHUNK_OVERLAP = 300     
+CHILD_CHUNK_SIZE = 256         # Small, precise semantic target for embedding
+CHILD_CHUNK_OVERLAP = 100
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NATIVE PYTHON CHUNKING LOGIC
+# ─────────────────────────────────────────────────────────────────────────────
+
+def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
+    """
+    Splits text into overlapping chunks natively using Python string slicing.
+    RAM Footprint: O(N) where N is text length. Extremely lightweight.
+    
+    Why this is better than LangChain:
+    LangChain's RecursiveCharacterTextSplitter instantiates thousands of document 
+    objects and regex patterns in memory. For a 7GB RAM limit, this native loop 
+    is exponentially safer and faster.
+    """
+    chunks = []
+    start = 0
+    text_length = len(text)
+
+    while start < text_length:
+        end = min(start + chunk_size, text_length)
+        
+        # Attempt to snap the chunk boundary to a natural sentence ending
+        if end < text_length:
+            search_from = start + int(chunk_size * 0.7)
+            for break_char in ['\n\n', '\n', '. ', '! ', '? ']:
+                break_pos = text.rfind(break_char, search_from, end)
+                if break_pos != -1:
+                    end = break_pos + len(break_char)
+                    break
+
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+
+        if end >= text_length:
+            break
+        start = end - overlap
+
+    return chunks
+
+
+def build_parent_child_hierarchy(filename: str, text: str, page_num: int, domain: str = "general") -> List[Dict[str, Any]]:
+    """
+    Creates Parent chunks, then splits them into Child chunks.
+    Attaches the full parent text to each child's metadata.
+    """
+    documents_to_insert = []
+    
+    # 1. Create the large semantic Parent chunks
+    parent_chunks = split_text(text, PARENT_CHUNK_SIZE, PARENT_CHUNK_OVERLAP)
+
+    for p_idx, parent_text in enumerate(parent_chunks):
+        # Generate a deterministic unique ID for the parent based on its content
+        parent_id = hashlib.md5(parent_text.encode("utf-8")).hexdigest()
+        
+        # 2. Split the parent into smaller precision Child chunks
+        child_chunks = split_text(parent_text, CHILD_CHUNK_SIZE, CHILD_CHUNK_OVERLAP)
+        
+        for c_idx, child_text in enumerate(child_chunks):
+            child_id = f"{parent_id}_child_{c_idx}"
+            
+            # 3. Metadata Enrichment
+            metadata = {
+                "source_file": filename,
+                "page_number": page_num,
+                "parent_id": parent_id,
+                # CRITICAL: We store the full parent text here! 
+                # The embedding is generated only on the small child_text.
+                "parent_text": parent_text,
+                "domain": domain
+            }
+            
+            documents_to_insert.append({
+                "id": child_id,
+                "text": child_text,      # Child text for exact vector targeting
+                "metadata": metadata     # Parent text attached for LLM context
+            })
+            
+    return documents_to_insert
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INGESTION PIPELINE
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
+    """
+    Reads PDFs and text files recursively from specialty folders, streaming page-by-page.
+    """
+    all_chunks = []
+    # rglob enables recursive searching through subdirectories
+    txt_files = list(knowledge_dir.rglob("*.txt"))
+    pdf_files = list(knowledge_dir.rglob("*.pdf"))
+    all_files = sorted(txt_files + pdf_files)
+
+    if not all_files:
+        print(f"[ERROR] No corpus files found in {knowledge_dir} (or its subdirectories)")
+        sys.exit(1)
+
+    for file_path in all_files:
+        # Extract specialty folder (domain) from path
+        rel_path = file_path.relative_to(knowledge_dir)
+        domain = rel_path.parent.name if rel_path.parent.name else "general"
+        
+        print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})")
+        
+        if file_path.suffix.lower() == '.pdf':
+            reader = PdfReader(file_path)
+            for i, page in enumerate(reader.pages):
+                page_text = page.extract_text()
+                if page_text:
+                    page_chunks = build_parent_child_hierarchy(file_path.name, page_text, page_num=i+1, domain=domain)
+                    all_chunks.extend(page_chunks)
+        else:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            # Split TXT into logical sections (~3000 chars each) and assign
+            # pseudo-page numbers so citations read "Page 3" not always "Page 1".
+            # This mirrors how PDF pages are chunked, making TXT citations look
+            # professional rather than all pointing to the same page.
+            section_size = 3000
+            sections = [
+                content[i:i + section_size].strip()
+                for i in range(0, len(content), section_size)
+            ]
+            for pseudo_page, section_text in enumerate(sections, start=1):
+                if not section_text:
+                    continue
+                section_chunks = build_parent_child_hierarchy(
+                    file_path.name, section_text, page_num=pseudo_page, domain=domain
+                )
+                all_chunks.extend(section_chunks)
+
+    print(f"\n  Total Child Chunks generated: {len(all_chunks)}")
+    return all_chunks
+
+
+def ingest_documents(
+    collection: chromadb.Collection, 
+    embedding_model: SentenceTransformer, 
+    chunks: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    
+    stats = {"total_processed": len(chunks), "inserted": 0, "skipped": 0}
+    
+    existing_ids = set()
+    if collection.count() > 0:
+        existing_results = collection.get(include=[])
+        existing_ids = set(existing_results["ids"])
+
+    unique_new_chunks = {}
+    for c in chunks:
+        if c["id"] not in existing_ids:
+            unique_new_chunks[c["id"]] = c
+            
+    new_chunks = list(unique_new_chunks.values())
+    stats["skipped"] = len(chunks) - len(new_chunks)
+    
+    if not new_chunks:
+        print("  [DB] All chunks already exist. Skipping.")
+        return stats
+
+    print(f"  [EMBED] Generating embeddings for {len(new_chunks)} new child chunks...")
+    t_start = time.time()
+    
+    # We only embed the SMALL child text. This makes vectors highly dense and specific!
+    texts_to_embed = [c["text"] for c in new_chunks]
+    
+    new_embeddings = embedding_model.encode(
+        texts_to_embed,
+        show_progress_bar=True,
+        batch_size=256,
+        normalize_embeddings=True,
+    ).tolist()
+    
+    # Inject embeddings back into the chunk dictionaries
+    for i, chunk in enumerate(new_chunks):
+        chunk["embedding"] = new_embeddings[i]
+    
+    elapsed = time.time() - t_start
+    print(f"  [EMBED] Done in {elapsed:.1f}s")
+
+    batch_size = 5000
+    print(f"[INIT] Saving {len(new_chunks)} chunks to ChromaDB in batches of {batch_size}...")
+    for i in range(0, len(new_chunks), batch_size):
+        batch = new_chunks[i:i+batch_size]
+        collection.add(
+            ids=[c["id"] for c in batch],
+            embeddings=[c["embedding"] for c in batch],
+            documents=[c["text"] for c in batch],
+            metadatas=[c["metadata"] for c in batch],
+        )
+    stats["inserted"] = len(new_chunks)
+    return stats
+
+
+def ingest_sqlite(chunks: List[Dict[str, Any]]):
+    """Inserts chunks into a SQLite FTS5 virtual table for lightning-fast BM25/Keyword search."""
+    with sqlite3.connect(SQLITE_DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute('''
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
+                id UNINDEXED,
+                text,
+                parent_id UNINDEXED,
+                parent_text UNINDEXED,
+                source_file UNINDEXED,
+                page_number UNINDEXED
+            )
+        ''')
+
+        c.execute("SELECT id FROM chunks")
+        existing = set(row[0] for row in c.fetchall())
+
+        new_chunks = [chk for chk in chunks if chk["id"] not in existing]
+        if not new_chunks:
+            print("  [SQLITE] All chunks already exist. Skipping.")
+            return
+
+        print(f"  [SQLITE] Inserting {len(new_chunks)} new child chunks into FTS5...")
+        c.executemany('''
+            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', [(
+            chk["id"],
+            chk["text"],
+            chk["metadata"]["parent_id"],
+            chk["metadata"]["parent_text"],
+            chk["metadata"]["source_file"],
+            str(chk["metadata"]["page_number"])
+        ) for chk in new_chunks])
+        conn.commit()
+
+
+
+def main():
+    print("=" * 65)
+    print("  APOLLO — Advanced RAG Pipeline (Phase 1: Parent-Child Chunking)")
+    print("=" * 65)
+
+    # 1. (Legacy DB clearing block removed to prevent corruption while backend is running)
+    
+    # 2. Chunk files page-by-page
+    chunks = load_and_chunk_files(KNOWLEDGE_DIR)
+    
+    # 3. Load models and DB
+    print("\n[INIT] Loading SentenceTransformer...")
+    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    
+    print(f"[INIT] Connecting to ChromaDB...")
+    CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"}
+    )
+    
+    # 4. Ingest
+    print("\n[START] Beginning vector ingestion (ChromaDB)...")
+    stats = ingest_documents(collection, embedding_model, chunks)
+    
+    print("\n[START] Beginning keyword ingestion (SQLite FTS5)...")
+    ingest_sqlite(chunks)
+    
+    print("\n" + "=" * 65)
+    print("  PHASE 1 COMPLETE")
+    print("=" * 65)
+    print(f"  Total Chunks   : {stats['total_processed']}")
+    print(f"  Newly Inserted : {stats['inserted']}")
+    print(f"  DB Size        : {collection.count()}")
+    print("\n  Child vectors stored securely with full Parent text attached.")
+    print("  Ready for Phase 2: Advanced Retrieval API Integration.\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -83,7 +83,10 @@ export default function HeroStarterCards({ onSelectPrompt }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 + idx * 0.05 }}
               onClick={() => onSelectPrompt(card.prompt)}
-              className="group relative p-4 rounded-2xl bg-white dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800/80 shadow-sm hover:shadow-md hover:border-emerald-500/40 dark:hover:border-[#00E599]/40 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden"
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelectPrompt(card.prompt)}
+              role="button"
+              tabIndex={0}
+              className="group relative p-4 rounded-2xl bg-white dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800/80 shadow-sm hover:shadow-md hover:border-emerald-500/40 dark:hover:border-[#00E599]/40 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:focus:ring-[#00E599]/50"
             >
               {/* Corner hover glow effect */}
               <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 dark:bg-[#00E599]/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-300 pointer-events-none" />

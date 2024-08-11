@@ -43,7 +43,9 @@ export default function Sidebar({
   onDeleteSession,
   systemStatus,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  docCount,
+  domainCount,
 }) {
   const [activeDropdown, setActiveDropdown] = useState(null)
 
@@ -57,6 +59,9 @@ export default function Sidebar({
   }, [activeDropdown])
 
   const groupedSessions = useMemo(() => groupSessionsByDate(sessions), [sessions])
+
+  const displayDocCount = docCount != null ? docCount.toLocaleString() : '64,200'
+  const displayDomainCount = domainCount != null ? domainCount : '18'
 
   return (
     <aside
@@ -186,13 +191,13 @@ export default function Sidebar({
           <div className="flex items-center justify-between text-slate-700 dark:text-zinc-300">
             <span className="flex items-center gap-1.5">
               <FolderCheck size={13} className="text-emerald-600 dark:text-[#00E599]" />
-              18 Domains Loaded
+              {displayDomainCount} Domains Loaded
             </span>
           </div>
           <div className="flex items-center justify-between text-slate-700 dark:text-zinc-300">
             <span className="flex items-center gap-1.5">
               <Database size={13} className="text-emerald-600 dark:text-[#00E599]" />
-              64,200 Embeddings
+              {displayDocCount} Embeddings
             </span>
           </div>
           <div className="pt-1 flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800/50">

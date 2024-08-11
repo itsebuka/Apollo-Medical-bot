@@ -161,7 +161,7 @@ body {
 }
 
 .apollo-response em {
-  color: var(--accent);
+  color: var(--text-secondary);
   font-style: italic;
 }
 

@@ -94,9 +94,51 @@ function ApolloThinkingIndicator() {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
   const [systemStatus, setSystemStatus] = useState('operational')
+  const [docCount, setDocCount] = useState(null)
+  const [domainCount, setDomainCount] = useState(null)
   const [sessions, setSessions] = useState([])
   const [currentSessionId, setCurrentSessionId] = useState(null)
   const [isReady, setIsReady] = useState(false)
+
+  // ── Poll Backend Health & Knowledge Stats ──────────────────────────────────
+  useEffect(() => {
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health')
+        if (res.ok) {
+          const data = await res.json()
+          setSystemStatus('operational')
+          if (data.vector_db_document_count) {
+            setDocCount(data.vector_db_document_count)
+          }
+        } else {
+          setSystemStatus('error')
+        }
+      } catch {
+        setSystemStatus('error')
+      }
+    }
+
+    async function checkDomains() {
+      try {
+        const res = await fetch('/domains')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.count != null) {
+            setDomainCount(data.count)
+          }
+        }
+      } catch { /* keep fallback */ }
+    }
+
+    checkHealth()
+    checkDomains()
+    const timer = setInterval(() => {
+      checkHealth()
+      checkDomains()
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [])
 
   // ── Theme Engine State (Dark / Light Mode) ─────────────────────────────────
   const [theme, setTheme] = useState(() => {
@@ -570,6 +612,8 @@ export default function App() {
         systemStatus={systemStatus}
         theme={theme}
         onToggleTheme={toggleTheme}
+        docCount={docCount}
+        domainCount={domainCount}
       />
 
       {/* ── Main Workstation Canvas ───────────────────────────────────────── */}

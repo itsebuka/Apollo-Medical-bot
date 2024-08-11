@@ -1,7 +1,9 @@
 from pypdf import PdfReader
 from pathlib import Path
 
-pdf_path = Path(r"c:\Users\Ebuka Eleogu\Ebuka-s-adtc-2026\backend\data\knowledge\NGA_Nigeria_Nigeria-Standard-treatment-guidelines-2nd-Edition_2016.pdf")
+knowledge_dir = Path(__file__).parent / "data" / "knowledge"
+pdf_files = list(knowledge_dir.rglob("*.pdf"))
+pdf_path = pdf_files[0] if pdf_files else knowledge_dir / "sample.pdf"
 try:
     reader = PdfReader(pdf_path)
     print(f"Total pages: {len(reader.pages)}")

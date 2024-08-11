@@ -37,7 +37,7 @@ if (-not (Test-Path $Python)) {
     Write-Host "  Run this once in your terminal:" -ForegroundColor Yellow
     Write-Host "    cd backend" -ForegroundColor Cyan
     Write-Host "    python -m venv venv" -ForegroundColor Cyan
-    Write-Host "    venv\Scripts\python.exe -m pip install chromadb sentence-transformers fastapi uvicorn python-multipart --prefer-binary" -ForegroundColor Cyan
+    Write-Host "    venv\Scripts\python.exe -m pip install -r requirements.txt" -ForegroundColor Cyan
     Write-Host ""
     Read-Host "Press Enter to exit"
     exit 1

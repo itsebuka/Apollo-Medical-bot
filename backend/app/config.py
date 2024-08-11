@@ -179,10 +179,10 @@ If appropriate, gently and kindly remind them that you are ready to assist with 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SINGLETON STATE — Populated at application startup in app.py
+# SINGLETON STATE — Populated at application startup in main.py
 # ─────────────────────────────────────────────────────────────────────────────
 
-# These are populated by the FastAPI lifespan event in app.py.
+# These are populated by the FastAPI lifespan event in main.py.
 # Using module-level variables as a simple, dependency-injection-free
 # singleton store. For a production system, you'd use a dependency injection
 # framework, but for our constrained environment, this is optimal.

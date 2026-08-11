@@ -828,8 +828,21 @@ async def stream_llm_response(messages: list[dict], max_tokens: int = 2048) -> A
             **gen_kwargs,
         )
 
+        loop = asyncio.get_running_loop()
+        stream_iter = iter(stream)
+
+        def _get_next_chunk():
+            try:
+                return next(stream_iter)
+            except StopIteration:
+                return None
+
         token_count = 0
-        for chunk in stream:
+        while True:
+            chunk = await loop.run_in_executor(None, _get_next_chunk)
+            if chunk is None:
+                break
+
             # Each chunk from llama_cpp has this structure:
             # {"choices": [{"delta": {"content": "token_text"}, "finish_reason": null}]}
             delta = chunk["choices"][0]["delta"]
@@ -844,18 +857,11 @@ async def stream_llm_response(messages: list[dict], max_tokens: int = 2048) -> A
                 payload = json.dumps({"type": "token", "content": token_text})
                 yield f"data: {payload}\n\n"
 
-                # Yield control to the event loop periodically.
-                # This allows FastAPI to flush the buffer to the client
-                # without waiting for the entire response to complete.
-                # asyncio.sleep(0) is a zero-cost context switch.
-                if token_count % 5 == 0:
-                    await asyncio.sleep(0)
-
             # When the model signals it's done, send a termination event
             if finish_reason is not None:
                 elapsed = time.time() - start_time
                 tps = token_count / elapsed if elapsed > 0 else 0
-                
+
                 end_payload = json.dumps({
                     "type": "end",
                     "finish_reason": finish_reason,

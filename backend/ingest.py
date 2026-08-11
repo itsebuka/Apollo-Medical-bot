@@ -252,7 +252,8 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
                 parent_id UNINDEXED,
                 parent_text UNINDEXED,
                 source_file UNINDEXED,
-                page_number UNINDEXED
+                page_number UNINDEXED,
+                domain UNINDEXED
             )
         ''')
 
@@ -266,15 +267,16 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
 
         print(f"  [SQLITE] Inserting {len(new_chunks)} new child chunks into FTS5...")
         c.executemany('''
-            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', [(
             chk["id"],
             chk["text"],
             chk["metadata"]["parent_id"],
             chk["metadata"]["parent_text"],
             chk["metadata"]["source_file"],
-            str(chk["metadata"]["page_number"])
+            str(chk["metadata"]["page_number"]),
+            chk["metadata"].get("domain", "general")
         ) for chk in new_chunks])
         conn.commit()
 

@@ -81,6 +81,13 @@ export default function CommandInputBar({
 
   const selectedScopeObj = scopeOptions.find(s => s.id === scope) || scopeOptions[0]
 
+  // Reset textarea height to auto when query is empty
+  useEffect(() => {
+    if (!query && inputRef.current) {
+      inputRef.current.style.height = 'auto'
+    }
+  }, [query, inputRef])
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()

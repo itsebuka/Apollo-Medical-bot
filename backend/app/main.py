@@ -374,10 +374,13 @@ def is_casual_query(query: str) -> bool:
         "good morning apollo", "good afternoon apollo", "good evening apollo",
         # With punctuation normalised
         "morning", "afternoon", "evening",
-        # Informal / social
+        # Informal / social & compounds
         "how are you", "how are you doing", "how is it going",
         "how do you do", "whats up", "whats good", "whats popping",
         "hows it going", "hows everything",
+        "hi how are you", "hi how are you doing",
+        "hello how are you", "hello how are you doing",
+        "hey how are you", "hey how are you doing",
         # Pidgin / informal Nigerian
         "how far", "how body", "oga", "nna",
         # Extended greetings with identifiers
@@ -394,19 +397,15 @@ def is_casual_query(query: str) -> bool:
     if len(words) > 8:
         return False
 
-    # If query contains any medical/clinical term, it is NOT casual regardless of greeting start
-    # This is the most important safety guard — prevents false-positive casual routing
-    # on queries like "Good morning, what is the treatment for malaria?"
+    # If query contains any clinical/medical term, it is NOT casual regardless of greeting start
+    # Keep this strictly to domain-specific clinical words (avoid generic stop/auxiliary words)
     medical_terms = {
         "treat", "treatment", "cure", "diagnosis", "diagnose", "symptom", "symptoms",
-        "what", "how", "why", "when", "where", "which", "who",
-        "can", "could", "should", "would", "does", "do", "is", "are",
         "drug", "medication", "medicine", "dose", "dosage", "antibiotic",
         "pain", "fever", "sick", "ill", "disease", "infection", "virus",
         "bacteria", "fungal", "parasite", "cancer", "diabetes", "hypertension",
         "explain", "describe", "define", "list", "outline", "compare", "contrast",
-        "help", "tell", "give", "show", "provide", "recommend",
-        "mechanism", "pathway", "structure", "function", "effect",
+        "mechanism", "pathway", "structure", "function", "effect", "patient", "clinical",
     }
     if any(w in medical_terms for w in words):
         return False

@@ -13,6 +13,11 @@ def main():
     print("Loading embedding model...")
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     
+    if not CHROMA_DB_DIR.exists():
+        print(f"[ERROR] ChromaDB directory not found at: {CHROMA_DB_DIR}")
+        print("        Run 'python ingest.py' first to build the vector database.")
+        return
+
     print("Connecting to ChromaDB...")
     client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
     collection = client.get_collection(name=COLLECTION_NAME)

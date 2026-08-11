@@ -1,0 +1,13 @@
+{
+  "name": "apollo-adtc-2026",
+  "version": "1.0.0",
+  "description": "Apollo — Offline RAG Medical Triage for NCDs in Nigeria (ADTC 2026)",
+  "scripts": {
+    "dev": "concurrently --names \"API,UI\" --prefix-colors \"green,cyan\" --kill-others-on-fail \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && .\\venv\\Scripts\\uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1",
+    "dev:frontend": "npm --prefix frontend run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

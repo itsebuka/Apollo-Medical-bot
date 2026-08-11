@@ -1,0 +1,28 @@
+# Apollo Backend — Phase 1 Dependencies
+# Pinned for reproducibility on the evaluation system.
+# Generated after: pip install fastapi uvicorn[standard] chromadb sentence-transformers llama-cpp-python
+
+# ── Web Framework ─────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9        # Required for form data handling in FastAPI
+
+# ── Vector Database ───────────────────────────────────────────────────────────
+chromadb==0.5.3
+
+# ── Embeddings ────────────────────────────────────────────────────────────────
+sentence-transformers==3.0.1
+torch==2.3.0                   # CPU-only PyTorch; sentence-transformers dependency
+# IMPORTANT: Install CPU-only torch to save ~1.5GB vs CUDA version:
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# ── LLM Runtime ──────────────────────────────────────────────────────────────
+# llama-cpp-python must be installed separately with the CPU wheel:
+# pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python==0.2.85
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+tqdm==4.66.4                   # Progress bars for embedding generation
+httpx==0.27.0                  # Async HTTP client (used by FastAPI internally)
+pydantic==2.7.4                # Data validation (FastAPI uses this natively)
+pypdf==4.2.0                   # Pure Python offline PDF text extraction

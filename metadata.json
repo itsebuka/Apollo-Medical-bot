@@ -1,37 +1,37 @@
 {
-  "team_id": "your-team-id",
-  "domain": "coding_assistants",
-  "language_scope": ["en"],
-  "african_alpha_claim": false,
+  "team_id": "N/A",
+  "domain": "healthcare_medical",
+  "language_scope": ["en", "pcm", "ha", "yo", "ig"],
+  "african_alpha_claim": true,
   "budget_laptop_claim": true,
   "submitter": {
-    "name": "your-name",
-    "email": "your-email@domain.com",
-    "github_handle": "your-github"
+    "name": "Eleogu Chukwuebuka Joseph",
+    "email": "eleogujoseph007@gmail.com",
+    "github_handle": "itsebuka"
   },
   "cross_disciplinary_pairing": {
-    "discipline": "education",
+    "discipline": "systems_engineering",
     "load_bearing": true,
-    "description": "Brief description of how your model serves a real-world domain."
+    "description": "Optimizing a highly constrained local RAG database mapping local dietary glycemic indices within strict memory limitations."
   },
   "test_prompts": [
     {
       "prompt_id": "tp_001",
-      "prompt": "Write a Python function that reads a CSV file and returns the column with the highest mean value."
+      "prompt": "Provide a localized dietary meal plan for a patient in Nigeria newly diagnosed with Type 2 Diabetes who primarily eats swallow foods like eba and pounded yam"
     },
     {
       "prompt_id": "tp_002",
-      "prompt": "Explain the difference between a list and a tuple in Python, and give one example where each is the better choice."
+      "prompt": "What are the primary lifestyle modifications and early warning signs a patient with hypertension should look out for to prevent a stroke?"
     }
   ],
   "model": {
-    "name": "SmolLM2-135M-Instruct-Q4_K_M",
+    "name": "Meta-Llama-3-8B-Instruct-Q4_K_M",
     "runtime": "llama.cpp",
     "quantization": "GGUF Q4_K_M",
-    "parameters_estimate": "135M",
+    "parameters_estimate": "8B",
     "packaging": "binary_bundle"
   },
   "_runtime": {
-    "model_path": "model/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+    "model_path": "model/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
   }
 }

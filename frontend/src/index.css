@@ -1,0 +1,258 @@
+/* Apollo Medical Workstation Design System
+   =============================================
+   Inspired by Linear, Vercel, and Apple Health.
+*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Light Mode Palette (Default / :root) ────────────────────────────── */
+:root {
+  --bg-base:          #f8fafc; /* Clean Off-White */
+  --bg-surface:       #ffffff; /* Crisp white surface */
+  --bg-elevated:      #f1f5f9; /* Slate 100 */
+  --bg-glass:         rgba(255, 255, 255, 0.85);
+  --border-color:     #e2e8f0; /* Slate 200 */
+  --border-subtle:    #cbd5e1;
+  --border-glow:      rgba(5, 150, 105, 0.35);
+  
+  --text-primary:     #0f172a; /* Deep Slate */
+  --text-secondary:   #475569; /* Slate 600 */
+  --text-muted:       #64748b; /* Slate 500 */
+  
+  --accent:           #059669; /* Vibrant Medical Emerald */
+  --accent-hover:     #047857;
+  --accent-alpha-10:  rgba(5, 150, 105, 0.08);
+  --accent-alpha-15:  rgba(5, 150, 105, 0.15);
+  --accent-alpha-20:  rgba(5, 150, 105, 0.20);
+  --accent-alpha-30:  rgba(5, 150, 105, 0.30);
+  
+  --shadow-main:      0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-surface:   0 4px 20px -2px rgba(15, 23, 42, 0.06);
+  --grid-line:        rgba(5, 150, 105, 0.04);
+}
+
+/* ─── Dark Mode Palette (.dark class) ────────────────────────────────── */
+html.dark {
+  --bg-base:          #09090b; /* Deep Zinc / #0a0d0f */
+  --bg-surface:       rgba(18, 21, 25, 0.75); /* Deep translucent charcoal */
+  --bg-elevated:      #121519;
+  --bg-glass:         rgba(18, 21, 25, 0.70);
+  --border-color:     rgba(255, 255, 255, 0.08); /* Translucent strokes */
+  --border-subtle:    #27272a;
+  --border-glow:      rgba(0, 229, 153, 0.40);
+  
+  --text-primary:     #f4f4f5; /* Zinc 100 */
+  --text-secondary:   #a1a1aa; /* Zinc 400 */
+  --text-muted:       #71717a; /* Zinc 500 */
+  
+  --accent:           #00E599; /* Mint Emerald */
+  --accent-hover:     #10b981;
+  --accent-alpha-10:  rgba(0, 229, 153, 0.10);
+  --accent-alpha-15:  rgba(0, 229, 153, 0.15);
+  --accent-alpha-20:  rgba(0, 229, 153, 0.20);
+  --accent-alpha-30:  rgba(0, 229, 153, 0.30);
+  
+  --shadow-main:      0 4px 24px rgba(0, 0, 0, 0.6);
+  --shadow-surface:   0 8px 32px rgba(0, 0, 0, 0.5);
+  --grid-line:        rgba(0, 229, 153, 0.04);
+}
+
+/* ─── Global Base Reset ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Geist', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Custom Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  opacity: 0.3;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ─── Text Selection ────────────────────────────────────────────────── */
+::selection {
+  background: var(--accent-alpha-30);
+  color: var(--accent);
+}
+
+/* ─── Markdown Content Rendered by Apollo ───────────────────────────── */
+.apollo-response {
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--text-primary);
+}
+
+.apollo-response h1,
+.apollo-response h2,
+.apollo-response h3 {
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.01em;
+}
+
+.apollo-response h1 { font-size: 1.15em; }
+.apollo-response h2 { font-size: 1.05em; }
+.apollo-response h3 { font-size: 0.98em; }
+
+.apollo-response p {
+  margin: 0.6em 0;
+}
+
+.apollo-response ul,
+.apollo-response ol {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+}
+
+.apollo-response li {
+  margin: 0.3em 0;
+  color: var(--text-secondary);
+}
+
+.apollo-response li::marker {
+  color: var(--accent);
+}
+
+.apollo-response strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.apollo-response em {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.apollo-response code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+  font-size: 0.85em;
+  background: var(--accent-alpha-10);
+  color: var(--accent);
+  padding: 0.15em 0.45em;
+  border-radius: 4px;
+  border: 1px solid var(--accent-alpha-20);
+}
+
+.apollo-response pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+
+.apollo-response pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+.apollo-response blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1em;
+  margin: 0.8em 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.apollo-response hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1em 0;
+}
+
+.apollo-response table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.9em;
+}
+
+.apollo-response th {
+  background: var(--accent-alpha-10);
+  color: var(--accent);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--border-color);
+}
+
+.apollo-response td {
+  padding: 0.4em 0.75em;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.apollo-response tr:hover td {
+  background: var(--accent-alpha-10);
+}
+
+/* ─── Glassmorphism Utility ─────────────────────────────────────────── */
+.glass-panel {
+  background: var(--bg-glass);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+}
+
+/* ─── Typing Cursor ─────────────────────────────────────────────────── */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 0.8s step-end infinite;
+  box-shadow: 0 0 6px var(--accent);
+}
+
+textarea:focus,
+input:focus {
+  outline: none;
+}

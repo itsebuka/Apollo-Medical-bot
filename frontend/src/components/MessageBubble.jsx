@@ -136,7 +136,7 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
       })
   }
 
-  const processedContent = content.replace(/\[Source: (.*?)\]/g, '[$1](#citation)')
+  const processedContent = content.replace(/\[Source(?: File)?: (.*?)\]/g, '[$1](#citation)')
 
   return (
     <motion.div 

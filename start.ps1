@@ -29,21 +29,27 @@ if ($tcpFrontend) {
     Stop-Process -Id $tcpFrontend.OwningProcess -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 1
 }
-# STEP 1: Check venv
+# STEP 1: Check Python environment
 if (-not (Test-Path $Python)) {
-    Write-Host "  [ERROR] Python virtual environment not found." -ForegroundColor Red
-    Write-Host "          Expected: $Python" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  Run this once in your terminal:" -ForegroundColor Yellow
-    Write-Host "    cd backend" -ForegroundColor Cyan
-    Write-Host "    python -m venv venv" -ForegroundColor Cyan
-    Write-Host "    venv\Scripts\python.exe -m pip install -r requirements.txt" -ForegroundColor Cyan
-    Write-Host ""
-    Read-Host "Press Enter to exit"
-    exit 1
+    $sysPython = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if ($sysPython) {
+        $Python = $sysPython
+        Write-Host "  [OK]   Using system Python: $Python" -ForegroundColor Green
+    } else {
+        Write-Host "  [ERROR] Python environment not found." -ForegroundColor Red
+        Write-Host "          Expected: $Python" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Run this once in your terminal:" -ForegroundColor Yellow
+        Write-Host "    cd backend" -ForegroundColor Cyan
+        Write-Host "    python -m venv venv" -ForegroundColor Cyan
+        Write-Host "    venv\Scripts\python.exe -m pip install -r requirements.txt" -ForegroundColor Cyan
+        Write-Host ""
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+} else {
+    Write-Host "  [OK]   Python venv found." -ForegroundColor Green
 }
-
-Write-Host "  [OK]   Python venv found." -ForegroundColor Green
 
 # STEP 2: Run ingest if chroma_db is missing or empty
 $dbExists = Test-Path $ChromaDB
@@ -71,21 +77,17 @@ if (-not $dbExists -or $dbEmpty) {
 
 Write-Host ""
 
-# STEP 3: Start backend in its own window
-Write-Host "  [START] Launching Apollo Backend  ->  http://localhost:8000 ..." -ForegroundColor Cyan
-Start-Process "cmd.exe" -ArgumentList "/k cd /d `"$Backend`" && `"$Python`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
+# STEP 3 & 4: Launch backend AND frontend simultaneously in parallel
+Write-Host "  [START] Launching Apollo Backend (8000) & Frontend (5173) simultaneously..." -ForegroundColor Cyan
 
-Start-Sleep -Seconds 2
-
-# STEP 4: Start frontend in its own window
-Write-Host "  [START] Launching Apollo Frontend  ->  http://localhost:5173 ..." -ForegroundColor Cyan
+Start-Process "cmd.exe" -ArgumentList "/k cd /d `"$Backend`" && set PYTHONPATH=. && `"$Python`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
 Start-Process "cmd.exe" -ArgumentList "/k cd /d `"$Frontend`" && npm run dev"
 
-# STEP 5: Countdown then open browser
+# STEP 5: Quick 3s timer then open browser
 Write-Host ""
-Write-Host "  [INFO]  Llama-3 8B is loading (4.5 GB model, takes ~15s)..." -ForegroundColor Yellow
+Write-Host "  [INFO]  Opening browser..." -ForegroundColor Yellow
 
-for ($i = 15; $i -gt 0; $i--) {
+for ($i = 3; $i -gt 0; $i--) {
     Write-Host -NoNewline ("`r  [INFO]  Opening browser in {0}s...  " -f $i) -ForegroundColor Yellow
     Start-Sleep -Seconds 1
 }

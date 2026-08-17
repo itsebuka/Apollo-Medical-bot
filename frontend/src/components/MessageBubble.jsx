@@ -43,7 +43,7 @@ function UserBubble({ messageId, content, timestamp, onEdit }) {
 
         {/* Message bubble — Signature Cobalt Blue background with high-contrast text */}
         <div
-          className="bg-blue-600 dark:bg-[#38BDF8] text-white dark:text-slate-950 font-medium rounded-2xl rounded-tr-xs px-5 py-3 shadow-md transition-all duration-200"
+          className="bg-blue-600 dark:bg-[#38BDF8] text-white dark:text-slate-950 font-medium rounded-2xl rounded-tr-xs px-5 py-3 shadow-md transition-all duration-200 selection:bg-blue-900 selection:text-white dark:selection:bg-slate-950 dark:selection:text-sky-200"
         >
           <p className="text-sm font-sans leading-relaxed whitespace-pre-wrap break-words">
             {content}

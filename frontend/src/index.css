@@ -15,48 +15,48 @@
   --bg-glass:         rgba(255, 255, 255, 0.85);
   --border-color:     #e2e8f0; /* Slate 200 */
   --border-subtle:    #cbd5e1;
-  --border-glow:      rgba(5, 150, 105, 0.35);
+  --border-glow:      rgba(37, 99, 235, 0.35);
   
   --text-primary:     #0f172a; /* Deep Slate */
   --text-secondary:   #475569; /* Slate 600 */
   --text-muted:       #64748b; /* Slate 500 */
   
-  --accent:           #059669; /* Vibrant Medical Emerald */
-  --accent-hover:     #047857;
-  --accent-alpha-10:  rgba(5, 150, 105, 0.08);
-  --accent-alpha-15:  rgba(5, 150, 105, 0.15);
-  --accent-alpha-20:  rgba(5, 150, 105, 0.20);
-  --accent-alpha-30:  rgba(5, 150, 105, 0.30);
+  --accent:           #2563eb; /* High-Precision Cobalt Blue */
+  --accent-hover:     #1d4ed8;
+  --accent-alpha-10:  rgba(37, 99, 235, 0.08);
+  --accent-alpha-15:  rgba(37, 99, 235, 0.15);
+  --accent-alpha-20:  rgba(37, 99, 235, 0.20);
+  --accent-alpha-30:  rgba(37, 99, 235, 0.30);
   
   --shadow-main:      0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
   --shadow-surface:   0 4px 20px -2px rgba(15, 23, 42, 0.06);
-  --grid-line:        rgba(5, 150, 105, 0.04);
+  --grid-line:        rgba(37, 99, 235, 0.04);
 }
 
 /* ─── Dark Mode Palette (.dark class) ────────────────────────────────── */
 html.dark {
-  --bg-base:          #09090b; /* Deep Zinc / #0a0d0f */
-  --bg-surface:       rgba(18, 21, 25, 0.75); /* Deep translucent charcoal */
-  --bg-elevated:      #121519;
-  --bg-glass:         rgba(18, 21, 25, 0.70);
+  --bg-base:          #070b12; /* Deep Cosmic Navy */
+  --bg-surface:       rgba(15, 23, 42, 0.75); /* Translucent navy surface */
+  --bg-elevated:      #0f172a;
+  --bg-glass:         rgba(15, 23, 42, 0.70);
   --border-color:     rgba(255, 255, 255, 0.08); /* Translucent strokes */
-  --border-subtle:    #27272a;
-  --border-glow:      rgba(0, 229, 153, 0.40);
+  --border-subtle:    #1e293b;
+  --border-glow:      rgba(56, 189, 248, 0.40);
   
-  --text-primary:     #f4f4f5; /* Zinc 100 */
-  --text-secondary:   #a1a1aa; /* Zinc 400 */
-  --text-muted:       #71717a; /* Zinc 500 */
+  --text-primary:     #f8fafc; /* Slate 50 */
+  --text-secondary:   #94a3b8; /* Slate 400 */
+  --text-muted:       #64748b; /* Slate 500 */
   
-  --accent:           #00E599; /* Mint Emerald */
-  --accent-hover:     #10b981;
-  --accent-alpha-10:  rgba(0, 229, 153, 0.10);
-  --accent-alpha-15:  rgba(0, 229, 153, 0.15);
-  --accent-alpha-20:  rgba(0, 229, 153, 0.20);
-  --accent-alpha-30:  rgba(0, 229, 153, 0.30);
+  --accent:           #38bdf8; /* Electric Azure / Sky Blue */
+  --accent-hover:     #0284c7;
+  --accent-alpha-10:  rgba(56, 189, 248, 0.10);
+  --accent-alpha-15:  rgba(56, 189, 248, 0.15);
+  --accent-alpha-20:  rgba(56, 189, 248, 0.20);
+  --accent-alpha-30:  rgba(56, 189, 248, 0.30);
   
   --shadow-main:      0 4px 24px rgba(0, 0, 0, 0.6);
   --shadow-surface:   0 8px 32px rgba(0, 0, 0, 0.5);
-  --grid-line:        rgba(0, 229, 153, 0.04);
+  --grid-line:        rgba(56, 189, 248, 0.04);
 }
 
 /* ─── Global Base Reset ──────────────────────────────────────────────── */

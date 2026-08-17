@@ -35,15 +35,15 @@ function UserBubble({ messageId, content, timestamp, onEdit }) {
           <button
             onClick={() => onEdit(messageId, content)}
             title="Edit message"
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-slate-400 dark:text-zinc-500 hover:text-emerald-600 dark:hover:text-[#00E599] hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full flex-shrink-0 self-center"
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-[#38BDF8] hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full flex-shrink-0 self-center"
           >
             <Pencil size={13} />
           </button>
         )}
 
-        {/* Message bubble — Signature Emerald Green background with high-contrast text */}
+        {/* Message bubble — Signature Cobalt Blue background with high-contrast text */}
         <div
-          className="bg-emerald-600 dark:bg-[#00E599] text-white dark:text-zinc-950 font-medium rounded-2xl rounded-tr-xs px-5 py-3 shadow-md transition-all duration-200"
+          className="bg-blue-600 dark:bg-[#38BDF8] text-white dark:text-slate-950 font-medium rounded-2xl rounded-tr-xs px-5 py-3 shadow-md transition-all duration-200"
         >
           <p className="text-sm font-sans leading-relaxed whitespace-pre-wrap break-words">
             {content}
@@ -51,7 +51,7 @@ function UserBubble({ messageId, content, timestamp, onEdit }) {
         </div>
 
         {/* User avatar */}
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-600/10 dark:bg-[#00E599]/10 border border-emerald-600/30 dark:border-[#00E599]/30 flex items-center justify-center text-emerald-600 dark:text-[#00E599] font-mono text-xs shadow-xs">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600/10 dark:bg-[#38BDF8]/10 border border-blue-600/30 dark:border-[#38BDF8]/30 flex items-center justify-center text-blue-600 dark:text-[#38BDF8] font-mono text-xs shadow-xs">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
@@ -151,7 +151,7 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
           className={`flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-900 border flex
                       items-center justify-center shadow-sm transition-all duration-300 ${
                         isStreaming
-                          ? 'border-emerald-500 dark:border-[#00E599] shadow-emerald-500/20'
+                          ? 'border-blue-600 dark:border-[#38BDF8] shadow-blue-500/20'
                           : 'border-slate-300 dark:border-zinc-800'
                       }`}
         >
@@ -163,14 +163,14 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
           className={`bg-slate-100/90 dark:bg-[#121519]/90 border rounded-2xl rounded-tl-xs
                       px-5 py-4 shadow-sm dark:shadow-md transition-all duration-200 ${
                         isStreaming
-                          ? 'border-emerald-500/50 dark:border-[#00E599]/40'
+                          ? 'border-blue-600/50 dark:border-[#38BDF8]/40'
                           : 'border-slate-200/90 dark:border-zinc-800/80'
                       }`}
         >
           {/* Header label */}
           <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200/80 dark:border-zinc-800/70">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-semibold tracking-widest text-emerald-600 dark:text-[#00E599] uppercase">
+              <span className="text-[10px] font-mono font-semibold tracking-widest text-blue-600 dark:text-[#38BDF8] uppercase">
                 Apollo
               </span>
               {isStreaming && (
@@ -199,7 +199,7 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
                 a: ({node, href, children, ...props}) => {
                   if (href === '#citation') {
                     return (
-                      <span className="inline-flex items-center px-2 py-0.5 ml-1 rounded-md text-[10px] font-mono font-medium bg-emerald-500/10 dark:bg-[#00E599]/10 text-emerald-600 dark:text-[#00E599] border border-emerald-500/30 dark:border-[#00E599]/30 cursor-pointer hover:bg-emerald-500/20 dark:hover:bg-[#00E599]/20 transition-colors" title="Source Document">
+                      <span className="inline-flex items-center px-2 py-0.5 ml-1 rounded-md text-[10px] font-mono font-medium bg-blue-600/10 dark:bg-[#38BDF8]/10 text-blue-600 dark:text-[#38BDF8] border border-blue-600/30 dark:border-[#38BDF8]/30 cursor-pointer hover:bg-blue-600/20 dark:hover:bg-[#38BDF8]/20 transition-colors" title="Source Document">
                         <svg className="w-3 h-3 mr-1 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
                         {children}
                       </span>
@@ -237,8 +237,8 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
                     onClick={handleSpeak}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-medium transition-all ${
                       isSpeaking
-                        ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-600 dark:text-[#00E599]'
-                        : 'bg-white/80 dark:bg-zinc-800/60 hover:bg-emerald-500/10 border-slate-200/90 dark:border-zinc-700/60 text-slate-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-[#00E599]'
+                        ? 'bg-blue-600/20 border-blue-600/50 text-blue-600 dark:text-[#38BDF8]'
+                        : 'bg-white/80 dark:bg-zinc-800/60 hover:bg-blue-600/10 border-slate-200/90 dark:border-zinc-700/60 text-slate-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-[#38BDF8]'
                     }`}
                     title={isSpeaking ? "Stop speaking" : "Read answer aloud"}
                   >
@@ -248,7 +248,7 @@ function AssistantBubble({ content, isStreaming, timestamp, isLowConfidence, isE
 
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-zinc-800/60 hover:bg-emerald-500/10 border border-slate-200/90 dark:border-zinc-700/60 text-[11px] font-mono font-medium text-slate-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-[#00E599] transition-all"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-zinc-800/60 hover:bg-blue-600/10 border border-slate-200/90 dark:border-zinc-700/60 text-[11px] font-mono font-medium text-slate-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-[#38BDF8] transition-all"
                     title="Copy for Electronic Health Record"
                   >
                     {copied ? <Check size={13} /> : <Copy size={13} />}

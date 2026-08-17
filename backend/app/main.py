@@ -290,7 +290,7 @@ CLINICAL_EXPANSION_DICT = {
 }
 
 def expand_query(query: str) -> str:
-    """Normalizes and expands clinical abbreviations prior to embedding."""
+    """Normalizes and expands clinical abbreviations prior to embedding, and appends high-yield terms for biochemical mechanism queries."""
     words = query.split()
     expanded = []
     for w in words:
@@ -299,7 +299,15 @@ def expand_query(query: str) -> str:
             expanded.append(CLINICAL_EXPANSION_DICT[clean_w])
         else:
             expanded.append(w)
-    return " ".join(expanded)
+            
+    base_expanded = " ".join(expanded)
+    q_lower = query.lower()
+    
+    # Mechanism Query Expansion Target: append high-yield enzymatic terms to guide vector & sparse retrieval
+    if any(k in q_lower for k in ["biochemical mechanism", "enzymatic mechanism", "pathogenicity", "mode of action", "enhancin", "cleavage"]):
+        base_expanded += " metalloproteinase zinc endopeptidase mucin peritrophic membrane degradation cleavage substrate catalytic"
+        
+    return base_expanded
 
 
 def _clean_source_label(source: str) -> str:

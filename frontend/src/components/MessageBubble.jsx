@@ -22,6 +22,30 @@ function formatTime(date) {
 
 // ── User Message Bubble ───────────────────────────────────────────────────────
 function UserBubble({ messageId, content, timestamp, onEdit }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyUserPrompt = () => {
+    navigator.clipboard.writeText(content)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch(() => {
+        try {
+          const el = document.createElement('textarea')
+          el.value = content
+          el.style.position = 'fixed'
+          el.style.opacity = '0'
+          document.body.appendChild(el)
+          el.select()
+          document.execCommand('copy')
+          document.body.removeChild(el)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        } catch { /* Silent fail */ }
+      })
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 14, scale: 0.98 }}
@@ -29,17 +53,27 @@ function UserBubble({ messageId, content, timestamp, onEdit }) {
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className="flex flex-col items-end gap-1.5 group"
     >
-      <div className="flex items-end gap-2.5 max-w-[85%] sm:max-w-[75%]">
-        {/* Edit button — visible on hover */}
-        {onEdit && (
+      <div className="flex items-end gap-2 max-w-[85%] sm:max-w-[75%]">
+        {/* Action controls (Copy & Edit) — visible on hover */}
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 flex-shrink-0 self-center">
           <button
-            onClick={() => onEdit(messageId, content)}
-            title="Edit message"
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-[#38BDF8] hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full flex-shrink-0 self-center"
+            onClick={handleCopyUserPrompt}
+            title={copied ? "Copied to clipboard" : "Copy prompt text"}
+            className="p-1.5 text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-[#38BDF8] hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full transition-all"
           >
-            <Pencil size={13} />
+            {copied ? <Check size={13} className="text-emerald-500 dark:text-[#38BDF8]" /> : <Copy size={13} />}
           </button>
-        )}
+
+          {onEdit && (
+            <button
+              onClick={() => onEdit(messageId, content)}
+              title="Edit message"
+              className="p-1.5 text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-[#38BDF8] hover:bg-slate-200 dark:hover:bg-zinc-800 rounded-full transition-all"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+        </div>
 
         {/* Message bubble — Signature Cobalt Blue background with high-contrast text */}
         <div

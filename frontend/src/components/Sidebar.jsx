@@ -73,13 +73,13 @@ export default function Sidebar({
       <div className="p-4 pt-5 pb-3 border-b border-slate-200/80 dark:border-zinc-800/60">
         <div className="flex items-center justify-between mb-4 px-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 dark:bg-[#00E599]/10 border border-emerald-500/30 dark:border-[#00E599]/30 flex items-center justify-center text-emerald-600 dark:text-[#00E599]">
+            <div className="w-7 h-7 rounded-lg bg-blue-600/10 dark:bg-[#38BDF8]/10 border border-blue-600/30 dark:border-[#38BDF8]/30 flex items-center justify-center text-blue-600 dark:text-[#38BDF8]">
               <ApolloLogo size={16} />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
                 Apollo Engine
-                <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-emerald-500/10 dark:bg-[#00E599]/10 text-emerald-600 dark:text-[#00E599] border border-emerald-500/20 dark:border-[#00E599]/20">
+                <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-blue-600/10 dark:bg-[#38BDF8]/10 text-blue-600 dark:text-[#38BDF8] border border-blue-600/20 dark:border-[#38BDF8]/20">
                   v2.4
                 </span>
               </span>
@@ -92,7 +92,7 @@ export default function Sidebar({
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           transition={{ type: "spring", stiffness: 400, damping: 20 }}
-          className="flex items-center justify-center gap-2.5 w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-[#00E599] dark:hover:bg-[#00E599]/90 text-white dark:text-zinc-950 font-medium text-sm rounded-xl px-4 py-2.5 shadow-sm hover:shadow-md transition-all group"
+          className="flex items-center justify-center gap-2.5 w-full bg-blue-600 hover:bg-blue-700 dark:bg-[#38BDF8] dark:hover:bg-[#38BDF8]/90 text-white dark:text-slate-950 font-medium text-sm rounded-xl px-4 py-2.5 shadow-sm hover:shadow-md transition-all group"
         >
           <Plus size={18} className="stroke-[2.5]" />
           <span>New Thread</span>
@@ -118,14 +118,14 @@ export default function Sidebar({
                       transition={{ type: "spring", stiffness: 350, damping: 25 }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs transition-all relative ${
                         isActive
-                          ? 'bg-slate-200/80 dark:bg-zinc-800/80 border-l-2 border-emerald-600 dark:border-[#00E599] text-slate-900 dark:text-white font-medium shadow-sm'
+                          ? 'bg-slate-200/80 dark:bg-zinc-800/80 border-l-2 border-blue-600 dark:border-[#38BDF8] text-slate-900 dark:text-white font-medium shadow-sm'
                           : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-200/50 dark:hover:bg-zinc-800/40 hover:text-slate-900 dark:hover:text-zinc-200'
                       }`}
                     >
                       <MessageSquare
                         size={14}
                         className={`flex-shrink-0 transition-colors ${
-                          isActive ? 'text-emerald-600 dark:text-[#00E599]' : 'text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300'
+                          isActive ? 'text-blue-600 dark:text-[#38BDF8]' : 'text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300'
                         }`}
                       />
                       <span className="truncate pr-5 font-sans">
@@ -190,19 +190,19 @@ export default function Sidebar({
         <div className="p-3 rounded-xl bg-white/70 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/70 shadow-sm space-y-1.5 font-mono text-[11px]">
           <div className="flex items-center justify-between text-slate-700 dark:text-zinc-300">
             <span className="flex items-center gap-1.5">
-              <FolderCheck size={13} className="text-emerald-600 dark:text-[#00E599]" />
+              <FolderCheck size={13} className="text-blue-600 dark:text-[#38BDF8]" />
               {displayDomainCount} Domains Loaded
             </span>
           </div>
           <div className="flex items-center justify-between text-slate-700 dark:text-zinc-300">
             <span className="flex items-center gap-1.5">
-              <Database size={13} className="text-emerald-600 dark:text-[#00E599]" />
+              <Database size={13} className="text-blue-600 dark:text-[#38BDF8]" />
               {displayDocCount} Embeddings
             </span>
           </div>
           <div className="pt-1 flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-400 border-t border-slate-100 dark:border-zinc-800/50">
             <span className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'operational' ? 'bg-emerald-500 dark:bg-[#00E599] animate-pulse' : 'bg-red-500'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${systemStatus === 'operational' ? 'bg-blue-500 dark:bg-[#38BDF8] animate-pulse' : 'bg-red-500'}`} />
               {systemStatus === 'operational' ? 'Offline Engine Ready' : 'System Disconnected'}
             </span>
             <Cpu size={12} className="text-slate-400 dark:text-zinc-500" />
@@ -213,7 +213,7 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-2 pt-1">
           <span className="text-xs font-mono font-medium text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
             {theme === 'dark' ? (
-              <Moon size={14} className="text-[#00E599]" />
+              <Moon size={14} className="text-[#38BDF8]" />
             ) : (
               <Sun size={14} className="text-amber-500" />
             )}
@@ -233,7 +233,7 @@ export default function Sidebar({
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
               className={`w-4 h-4 rounded-full flex items-center justify-center shadow-sm ${
                 theme === 'dark'
-                  ? 'translate-x-5 bg-[#00E599] text-zinc-950'
+                  ? 'translate-x-5 bg-[#38BDF8] text-slate-950'
                   : 'translate-x-0 bg-white text-slate-700'
               }`}
             >

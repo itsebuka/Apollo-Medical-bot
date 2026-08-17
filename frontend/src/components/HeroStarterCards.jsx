@@ -46,9 +46,9 @@ export default function HeroStarterCards({ onSelectPrompt }) {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 dark:bg-[#00E599]/10 border border-emerald-500/30 dark:border-[#00E599]/30 text-emerald-600 dark:text-[#00E599] text-xs font-mono font-medium tracking-wider shadow-sm mb-6"
+        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-600/10 dark:bg-[#38BDF8]/10 border border-blue-600/30 dark:border-[#38BDF8]/30 text-blue-600 dark:text-[#38BDF8] text-xs font-mono font-medium tracking-wider shadow-sm mb-6"
       >
-        <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-[#00E599] animate-pulse" />
+        <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-[#38BDF8] animate-pulse" />
         <span>APOLLO ENGINE v2.4 &nbsp;|&nbsp; OFFLINE VECTOR DB ACTIVE</span>
       </motion.div>
 
@@ -59,7 +59,7 @@ export default function HeroStarterCards({ onSelectPrompt }) {
         transition={{ duration: 0.35, delay: 0.05 }}
         className="flex flex-col items-center"
       >
-        <div className="mb-4 p-3 rounded-2xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm text-emerald-600 dark:text-[#00E599]">
+        <div className="mb-4 p-3 rounded-2xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm text-blue-600 dark:text-[#38BDF8]">
           <ApolloLogo size={48} />
         </div>
 
@@ -86,21 +86,21 @@ export default function HeroStarterCards({ onSelectPrompt }) {
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelectPrompt(card.prompt)}
               role="button"
               tabIndex={0}
-              className="group relative p-4 rounded-2xl bg-white dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800/80 shadow-sm hover:shadow-md hover:border-emerald-500/40 dark:hover:border-[#00E599]/40 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:focus:ring-[#00E599]/50"
+              className="group relative p-4 rounded-2xl bg-white dark:bg-zinc-900/80 border border-slate-200 dark:border-zinc-800/80 shadow-sm hover:shadow-md hover:border-blue-600/40 dark:hover:border-[#38BDF8]/40 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-600/50 dark:focus:ring-[#38BDF8]/50"
             >
               {/* Corner hover glow effect */}
-              <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 dark:bg-[#00E599]/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-300 pointer-events-none" />
+              <div className="absolute -top-12 -right-12 w-24 h-24 bg-blue-600/10 dark:bg-[#38BDF8]/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-300 pointer-events-none" />
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-[#00E599] uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="text-[11px] font-mono font-medium text-blue-600 dark:text-[#38BDF8] uppercase tracking-wider flex items-center gap-1.5">
                     <Icon size={14} className="stroke-[2]" />
                     {card.category}
                   </span>
-                  <Sparkles size={13} className="text-slate-300 dark:text-zinc-600 group-hover:text-emerald-500 dark:group-hover:text-[#00E599] transition-colors" />
+                  <Sparkles size={13} className="text-slate-300 dark:text-zinc-600 group-hover:text-blue-600 dark:group-hover:text-[#38BDF8] transition-colors" />
                 </div>
 
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100 group-hover:text-emerald-600 dark:group-hover:text-[#00E599] transition-colors mb-1">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-[#38BDF8] transition-colors mb-1">
                   {card.title}
                 </h3>
 
@@ -111,7 +111,7 @@ export default function HeroStarterCards({ onSelectPrompt }) {
 
               <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-between text-[11px] font-mono text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300">
                 <span>Run Preset Query</span>
-                <span className="text-emerald-600 dark:text-[#00E599] font-sans group-hover:translate-x-1 transition-transform">
+                <span className="text-blue-600 dark:text-[#38BDF8] font-sans group-hover:translate-x-1 transition-transform">
                   &rarr;
                 </span>
               </div>

@@ -1076,15 +1076,14 @@ async def chat(request: ChatRequest):
 
     q_len = len(latest_query)
     if is_complex_query:
-        # Complex mechanism/comparison questions always get a generous budget
-        dynamic_max_tokens = 1536
+        # Complex mechanism/comparison questions get 2560 max tokens so reference lists are never truncated
+        dynamic_max_tokens = 2560
     elif q_len < 80 and top_sim > 0.75:
-        # Short, high-confidence factual lookups (bumped from 512 → 768)
-        dynamic_max_tokens = 768
-    elif q_len < 250 or top_sim > 0.50:
         dynamic_max_tokens = 1024
+    elif q_len < 250 or top_sim > 0.50:
+        dynamic_max_tokens = 1536
     else:
-        dynamic_max_tokens = 2048
+        dynamic_max_tokens = 2560
     logger.info(f"[BUDGET] Allocated dynamic max_tokens: {dynamic_max_tokens} (complex={is_complex_query})")
 
     # ── Step 3: Build the prompt ──────────────────────────────────────────────

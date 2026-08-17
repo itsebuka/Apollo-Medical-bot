@@ -88,9 +88,8 @@ EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_COLLECTION_NAME = "apollo_medical_knowledge"
 
 # Number of chunks to retrieve from ChromaDB per query.
-# 3 is the sweet spot: enough diverse context without burning too many tokens.
-# At 512 chars/chunk, 3 chunks ≈ 350-450 tokens of retrieved context.
-N_RESULTS = 3
+# Increased from 3 -> 5 to ensure multi-page functional coverage of complex mechanisms.
+N_RESULTS = 5
 
 CROSS_ENCODER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 

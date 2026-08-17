@@ -59,10 +59,9 @@ LLM_CONFIG: dict[str, Any] = {
     # any laptop regardless of GPU presence. Critical for offline evaluation.
     "n_gpu_layers": 0,
 
-    # Disable mmap on Windows to fix CPU_REPACK memory allocation failures.
-    # When mmap is enabled, llama.cpp tries to allocate a massive 3.3GB contiguous
-    # buffer for repacking, which often fails due to memory fragmentation.
-    "use_mmap": False,
+    # Enable mmap on Windows to allow instant memory-mapped model loading
+    # and prevent 3.36GB CPU_REPACK contiguous RAM allocation failures.
+    "use_mmap": True,
 
     # Lock model weights in RAM (prevent OS from swapping to disk).
     # NOTE: Set to False on Windows by default because it requires the

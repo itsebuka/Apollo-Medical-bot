@@ -176,15 +176,24 @@ async def lifespan(app: FastAPI):
         )
         logger.info(f"LLM loaded in {time.time() - t:.1f}s ✓")
     except Exception as e:
-        # Flash Attention may not be supported on all llama-cpp-python builds.
-        # If the first load fails, retry with flash_attn disabled before giving up.
-        logger.warning(f"Initial LLM load failed ({e}). Retrying with flash_attn=False...")
-        fallback_config = {**config.LLM_CONFIG, "flash_attn": False}
-        config.llm_instance = Llama(
-            model_path=str(config.MODEL_PATH),
-            **fallback_config,
-        )
-        logger.info(f"LLM loaded (flash_attn=False fallback) in {time.time() - t:.1f}s ✓")
+        logger.warning(f"Initial LLM load failed ({e}). Retrying with flash_attn=False & use_mmap=True...")
+        try:
+            fallback_config = {**config.LLM_CONFIG, "flash_attn": False, "use_mmap": True}
+            config.llm_instance = Llama(
+                model_path=str(config.MODEL_PATH),
+                **fallback_config,
+            )
+            logger.info(f"LLM loaded (fallback config) in {time.time() - t:.1f}s ✓")
+        except Exception as e2:
+            logger.warning(f"Second LLM load attempt failed ({e2}). Retrying with minimal default parameters...")
+            config.llm_instance = Llama(
+                model_path=str(config.MODEL_PATH),
+                n_ctx=config.LLM_CONFIG.get("n_ctx", 4096),
+                n_threads=config.LLM_CONFIG.get("n_threads", 4),
+                use_mmap=True,
+                verbose=False,
+            )
+            logger.info(f"LLM loaded (minimal fallback) in {time.time() - t:.1f}s ✓")
 
     # ── Load Embedding Model ──────────────────────────────────────────────────
     logger.info(f"Loading embedding model: {config.EMBEDDING_MODEL_NAME}")

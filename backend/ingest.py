@@ -37,27 +37,65 @@ SQLITE_DB_PATH = BACKEND_DIR / "fts.db"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 COLLECTION_NAME = "apollo_medical_knowledge"
 
-# PARENT-CHILD CHUNKING CONFIGURATION
-# Parent chunks hold semantic context. Child chunks drive precision search.
-PARENT_CHUNK_SIZE = 1500       # Large context window for the LLM
-PARENT_CHUNK_OVERLAP = 300     
-CHILD_CHUNK_SIZE = 256         # Small, precise semantic target for embedding
+import re
+
+# PARENT-CHILD & SLIDING WINDOW CHUNKING CONFIGURATION
+# 1000 token/char parent chunks with generous 250 overlap to preserve tabular data and step-by-step cascades
+PARENT_CHUNK_SIZE = 1000       # Token-aware sliding window parent size
+PARENT_CHUNK_OVERLAP = 250     # Generous overlap to avoid cutting cascades
+CHILD_CHUNK_SIZE = 256         # Precision semantic target for embedding
 CHILD_CHUNK_OVERLAP = 100
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NATIVE PYTHON CHUNKING LOGIC
+# FILENAME NORMALIZATION & METADATA ENRICHMENT LOGIC
+# ─────────────────────────────────────────────────────────────────────────────
+
+def clean_document_title(filename: str) -> str:
+    """
+    Strips internal database artifact IDs or raw numeric suffixes from filenames.
+    Converts 'molecular-virology-moses-p-adoga-2347.pdf' -> 'Molecular Virology (Moses P. Adoga)'.
+    """
+    base = re.sub(r"\.(pdf|txt)$", "", filename, flags=re.IGNORECASE).strip()
+    
+    # Strip database artifact IDs like -2347, _2348 at the end
+    base = re.sub(r"[-_]\d{3,5}$", "", base)
+    
+    # Replace hyphens and underscores with spaces
+    base = base.replace("-", " ").replace("_", " ")
+    
+    # Detect author patterns like "Moses P Adoga"
+    parts = base.split()
+    cleaned_words = []
+    for p in parts:
+        if re.fullmatch(r"\d{4}", p):
+            year = int(p)
+            if year < 1900 or year > 2030:
+                continue  # Drop bogus year IDs
+        cleaned_words.append(p.capitalize())
+        
+    title_str = " ".join(cleaned_words)
+    return title_str if title_str else filename
+
+
+def extract_section_header(text: str) -> str:
+    """Extracts the nearest preceding section header or title from chunk text."""
+    lines = text.splitlines()
+    for line in lines:
+        line_s = line.strip()
+        if line_s.startswith("#") or line_s.lower().startswith("chapter") or line_s.lower().startswith("section"):
+            return re.sub(r"^#+\s*", "", line_s)
+    return "General Section"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NATIVE PYTHON BOUNDARY-AWARE CHUNKING LOGIC
 # ─────────────────────────────────────────────────────────────────────────────
 
 def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     """
-    Splits text into overlapping chunks natively using Python string slicing.
-    RAM Footprint: O(N) where N is text length. Extremely lightweight.
-    
-    Why this is better than LangChain:
-    LangChain's RecursiveCharacterTextSplitter instantiates thousands of document 
-    objects and regex patterns in memory. For a 7GB RAM limit, this native loop 
-    is exponentially safer and faster.
+    Splits text into overlapping chunks using hierarchical boundary priority:
+    Markdown headers -> section dividers -> double linebreaks -> bullet lists -> sentence breaks.
     """
     chunks = []
     start = 0
@@ -66,10 +104,10 @@ def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     while start < text_length:
         end = min(start + chunk_size, text_length)
         
-        # Attempt to snap the chunk boundary to a natural sentence ending
+        # Attempt to snap the chunk boundary to natural semantic dividers
         if end < text_length:
-            search_from = start + int(chunk_size * 0.7)
-            for break_char in ['\n\n', '\n', '. ', '! ', '? ']:
+            search_from = start + int(chunk_size * 0.65)
+            for break_char in ['\n## ', '\n### ', '\n---', '\n\n', '\n- ', '\n* ', '. ', '! ', '? ']:
                 break_pos = text.rfind(break_char, search_from, end)
                 if break_pos != -1:
                     end = break_pos + len(break_char)
@@ -86,21 +124,22 @@ def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     return chunks
 
 
-def build_parent_child_hierarchy(filename: str, text: str, page_num: int, domain: str = "general") -> List[Dict[str, Any]]:
+def build_parent_child_hierarchy(filename: str, text: str, page_num: int, domain: str = "GENERAL") -> List[Dict[str, Any]]:
     """
-    Creates Parent chunks, then splits them into Child chunks.
-    Attaches the full parent text to each child's metadata.
+    Creates Parent chunks, then splits them into Child chunks with rich metadata enrichment.
     """
     documents_to_insert = []
+    document_title = clean_document_title(filename)
+    section_header = extract_section_header(text)
+    norm_domain = domain.upper().strip() if domain else "GENERAL"
     
-    # 1. Create the large semantic Parent chunks
+    # 1. Create the large semantic Parent chunks (1000 chars / 250 overlap)
     parent_chunks = split_text(text, PARENT_CHUNK_SIZE, PARENT_CHUNK_OVERLAP)
 
     for p_idx, parent_text in enumerate(parent_chunks):
-        # Generate a deterministic unique ID for the parent based on its content
         parent_id = hashlib.md5(parent_text.encode("utf-8")).hexdigest()
         
-        # 2. Split the parent into smaller precision Child chunks
+        # 2. Split the parent into precision Child chunks
         child_chunks = split_text(parent_text, CHILD_CHUNK_SIZE, CHILD_CHUNK_OVERLAP)
         
         for c_idx, child_text in enumerate(child_chunks):
@@ -109,18 +148,18 @@ def build_parent_child_hierarchy(filename: str, text: str, page_num: int, domain
             # 3. Metadata Enrichment
             metadata = {
                 "source_file": filename,
+                "document_title": document_title,
+                "section_header": section_header,
                 "page_number": page_num,
                 "parent_id": parent_id,
-                # CRITICAL: We store the full parent text here! 
-                # The embedding is generated only on the small child_text.
                 "parent_text": parent_text,
-                "domain": domain
+                "domain": norm_domain,
             }
             
             documents_to_insert.append({
                 "id": child_id,
-                "text": child_text,      # Child text for exact vector targeting
-                "metadata": metadata     # Parent text attached for LLM context
+                "text": child_text,
+                "metadata": metadata
             })
             
     return documents_to_insert

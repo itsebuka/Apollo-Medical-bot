@@ -55,21 +55,21 @@ function ApolloThinkingIndicator() {
     >
       {/* Apollo avatar with pulse ring */}
       <div className="relative flex-shrink-0">
-        <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-emerald-500/60 dark:border-[#00E599]/60 flex items-center justify-center shadow-sm">
+        <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-900 border border-blue-600/60 dark:border-[#38BDF8]/60 flex items-center justify-center shadow-sm">
           <ApolloLogo size={16} animated={true} />
         </div>
         {/* Outer pulse ring */}
         <motion.div
           animate={{ scale: [1, 1.55, 1], opacity: [0.5, 0, 0.5] }}
           transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-          className="absolute inset-0 rounded-full border border-emerald-500/40 dark:border-[#00E599]/40"
+          className="absolute inset-0 rounded-full border border-blue-600/40 dark:border-[#38BDF8]/40"
         />
       </div>
 
       {/* Thinking bubble */}
-      <div className="bg-slate-100/90 dark:bg-[#121519]/90 border border-emerald-500/40 dark:border-[#00E599]/30 rounded-2xl rounded-tl-xs px-5 py-3 shadow-sm min-w-[220px]">
+      <div className="bg-slate-100/90 dark:bg-[#121519]/90 border border-blue-600/40 dark:border-[#38BDF8]/30 rounded-2xl rounded-tl-xs px-5 py-3 shadow-sm min-w-[220px]">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[10px] font-mono font-semibold tracking-widest text-emerald-600 dark:text-[#00E599] uppercase">Apollo</span>
+          <span className="text-[10px] font-mono font-semibold tracking-widest text-blue-600 dark:text-[#38BDF8] uppercase">Apollo</span>
           <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500 animate-pulse">· thinking</span>
         </div>
         <AnimatePresence mode="wait">

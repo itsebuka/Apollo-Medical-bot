@@ -126,7 +126,7 @@ export default function CommandInputBar({
         )}
 
         {uploadedDoc && (
-          <div className="flex items-center gap-2 bg-emerald-500/10 dark:bg-[#00E599]/10 border border-emerald-500/30 dark:border-[#00E599]/30 text-emerald-600 dark:text-[#00E599] px-3 py-1.5 rounded-xl text-xs font-mono">
+          <div className="flex items-center gap-2 bg-blue-600/10 dark:bg-[#38BDF8]/10 border border-blue-600/30 dark:border-[#38BDF8]/30 text-blue-600 dark:text-[#38BDF8] px-3 py-1.5 rounded-xl text-xs font-mono">
             <FileText size={14} />
             <span className="truncate max-w-[240px] font-medium">{uploadedDoc.filename}</span>
             {uploadedDoc.truncated && (
@@ -147,7 +147,7 @@ export default function CommandInputBar({
       </div>
 
       {/* ── High-Tech Command Container ────────────────────────────────────── */}
-      <div className="bg-white/90 dark:bg-[#121519]/90 backdrop-blur-xl border border-slate-200 dark:border-zinc-800 rounded-3xl p-3 shadow-lg dark:shadow-2xl transition-all duration-200 focus-within:border-emerald-500/50 dark:focus-within:border-[#00E599]/50 focus-within:ring-2 focus-within:ring-emerald-500/10 dark:focus-within:ring-[#00E599]/10">
+      <div className="bg-white/90 dark:bg-[#121519]/90 backdrop-blur-xl border border-slate-200 dark:border-zinc-800 rounded-3xl p-3 shadow-lg dark:shadow-2xl transition-all duration-200 focus-within:border-blue-600/50 dark:focus-within:border-[#38BDF8]/50 focus-within:ring-2 focus-within:ring-blue-600/10 dark:focus-within:ring-[#38BDF8]/10">
         
         {/* ── Sub-Control Bar: Scope Selector & Mode Toggle ──────────────── */}
         <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100 dark:border-zinc-800/80 px-1 text-xs font-mono">
@@ -182,7 +182,7 @@ export default function CommandInputBar({
                       }}
                       className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition-colors ${
                         scope === opt.id
-                          ? 'bg-emerald-500/10 dark:bg-[#00E599]/10 text-emerald-600 dark:text-[#00E599] font-semibold'
+                          ? 'bg-blue-600/10 dark:bg-[#38BDF8]/10 text-blue-600 dark:text-[#38BDF8] font-semibold'
                           : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800/80'
                       }`}
                     >
@@ -202,7 +202,7 @@ export default function CommandInputBar({
               onClick={() => onModeChange('triage')}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all ${
                 mode === 'triage'
-                  ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-[#00E599] font-semibold shadow-xs'
+                  ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-[#38BDF8] font-semibold shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
               }`}
             >
@@ -214,7 +214,7 @@ export default function CommandInputBar({
               onClick={() => onModeChange('research')}
               className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all ${
                 mode === 'research'
-                  ? 'bg-white dark:bg-zinc-900 text-emerald-600 dark:text-[#00E599] font-semibold shadow-xs'
+                  ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-[#38BDF8] font-semibold shadow-xs'
                   : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
               }`}
             >
@@ -236,7 +236,7 @@ export default function CommandInputBar({
             title="Attach medical document (PDF or TXT)"
             className="p-2 text-slate-400 hover:text-slate-700 dark:text-zinc-500 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/80 rounded-xl transition-colors flex-shrink-0 disabled:opacity-40 mb-1"
           >
-            {isUploading ? <Loader2 size={18} className="animate-spin text-emerald-500 dark:text-[#00E599]" /> : <Paperclip size={18} />}
+            {isUploading ? <Loader2 size={18} className="animate-spin text-blue-600 dark:text-[#38BDF8]" /> : <Paperclip size={18} />}
           </button>
 
           {/* Text Area Input */}
@@ -279,7 +279,7 @@ export default function CommandInputBar({
                 className={`relative p-2.5 rounded-xl transition-all ${
                   isListening
                     ? 'bg-red-500 text-white shadow-md shadow-red-500/30'
-                    : 'text-slate-400 dark:text-zinc-500 hover:text-emerald-600 dark:hover:text-[#00E599] hover:bg-slate-100 dark:hover:bg-zinc-800'
+                    : 'text-slate-400 dark:text-zinc-500 hover:text-blue-600 dark:hover:text-[#38BDF8] hover:bg-slate-100 dark:hover:bg-zinc-800'
                 }`}
               >
                 {isListening && (
@@ -299,7 +299,7 @@ export default function CommandInputBar({
                 className={`p-2.5 rounded-xl font-medium transition-all shadow-md flex items-center justify-center ${
                   editingMessageId
                     ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
-                    : 'bg-emerald-600 hover:bg-emerald-700 dark:bg-[#00E599] dark:hover:bg-[#00E599]/90 text-white dark:text-zinc-950 shadow-emerald-500/20'
+                    : 'bg-blue-600 hover:bg-blue-700 dark:bg-[#38BDF8] dark:hover:bg-[#38BDF8]/90 text-white dark:text-slate-950 shadow-blue-500/20'
                 }`}
               >
                 {editingMessageId ? <Pencil size={18} /> : <Send size={18} className="stroke-[2.5]" />}

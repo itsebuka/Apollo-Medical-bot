@@ -313,16 +313,9 @@ def expand_query(query: str) -> str:
 def _clean_source_label(source: str) -> str:
     """
     Converts a raw source string like:
-        'virology-martin-ngutuku-maratani-2348.pdf (Page 86)'
-    into a clean, LLM-safe label like:
-        'Virology Martin Ngutuku Maratani [filename] (Page 86)'
-
-    This prevents the LLM from interpreting:
-      - filename numbers as publication years (e.g. 2348 is NOT a year)
-      - kebab/underscore tokens as author surnames
-
-    The label is injected as 'Source File: ...' (not 'Source: ...') to signal
-    unambiguously to the LLM that this is a file path reference, not a citation.
+        'molecular-virology-moses-p-adoga-2347.pdf (Page 86)'
+    into a clean, publication-grade document title label:
+        'Molecular Virology (Moses P. Adoga) (Page 86)'
     """
     import re as _re
 
@@ -335,29 +328,21 @@ def _clean_source_label(source: str) -> str:
     else:
         source_base = source.strip()
 
-    # Strip file extension
-    source_base = _re.sub(r"\.pdf$", "", source_base, flags=_re.IGNORECASE)
-    source_base = _re.sub(r"\.txt$", "", source_base, flags=_re.IGNORECASE)
+    # Strip file extension and numeric database suffixes
+    source_base = _re.sub(r"\.(pdf|txt)$", "", source_base, flags=_re.IGNORECASE)
+    source_base = _re.sub(r"[-_]\d{3,5}$", "", source_base)
 
     # Replace hyphens and underscores with spaces
     source_base = source_base.replace("-", " ").replace("_", " ")
 
-    # Remove tokens that look like implausible years (> 2030 or < 1900)
-    # but keep page numbers untouched (they are in the page_suffix already)
-    def _filter_bogus_years(token: str) -> str:
-        if _re.fullmatch(r"\d{4}", token):
-            year = int(token)
-            if year < 1900 or year > 2030:
-                return ""  # Drop bogus years entirely
-        return token
-
-    tokens = [_filter_bogus_years(t) for t in source_base.split()]
-    cleaned = " ".join(t for t in tokens if t).strip()
+    # Filter out bogus standalone digits or database artifacts
+    tokens = [t for t in source_base.split() if not (_re.fullmatch(r"\d{4,}", t) and (int(t) < 1900 or int(t) > 2030))]
+    cleaned = " ".join(tokens).strip()
 
     # Title-case for readability
     cleaned = cleaned.title() if cleaned else source_base.strip()
 
-    return f"{cleaned} [filename]{page_suffix}"
+    return f"{cleaned}{page_suffix}"
 
 
 
@@ -556,9 +541,9 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
     search_text = search_query_override if search_query_override else query
     expanded_query = expand_query(search_text)
 
-    # Clamp search_k to the actual document count to prevent ChromaDB crash
+    # Initial retrieval pool expansion: initial_k = 12 candidates prior to Cross-Encoder re-ranking
     total_docs = config.chroma_collection_instance.count()
-    search_k = min(n_results * 5, max(1, total_docs))
+    search_k = min(max(12, n_results * 4), max(1, total_docs))
 
     # Build optional ChromaDB where filter for domain scoping
     # When domain_filter is set (e.g. 'virology'), only chunks from that domain are retrieved.

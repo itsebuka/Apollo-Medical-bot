@@ -709,6 +709,33 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
     return tuple(merged_contexts[key] for key in sorted_keys[:search_k])
 
 
+def _sanitize_clinical_query(query: str) -> str:
+    """
+    Strips noise preambles like 'second attemp at asking the question:',
+    'Apollo Triage Summary', previous output paste-backs, or conversational intros
+    to isolate the core clinical question for high-precision RAG vector retrieval.
+    """
+    clean_q = query.strip()
+    
+    # If the user pasted back an old Apollo output, extract the actual question or header line
+    if "Apollo Triage Summary" in clean_q or "Clinical Context Analysis" in clean_q:
+        lines = [l.strip() for l in clean_q.splitlines() if l.strip()]
+        for l in lines:
+            if l.lower().startswith("question:") or l.lower().startswith("query:") or "biochemical mechanism" in l.lower():
+                clean_q = re.sub(r"^(question|query):\s*", "", l, flags=re.IGNORECASE).strip()
+                break
+        else:
+            for l in lines:
+                if "apollo triage summary" not in l.lower() and "generated:" not in l.lower():
+                    clean_q = l
+                    break
+
+    # Strip common attempt prefixes
+    clean_q = re.sub(r"^(second|third|another)?\s*(attemp|attempt|try)\s*(at|of)?\s*(asking|running)?\s*(the)?\s*(question|query)?:?\s*", "", clean_q, flags=re.IGNORECASE)
+
+    return clean_q.strip() or query
+
+
 async def retrieve_context(query: str, n_results: int, search_query_override: str | None = None, domain_filter: str | None = None) -> list[dict]:
     """
     Advanced Hybrid Retrieval with Multi-Query Decomposition and Async Cross-Encoder Re-Ranking.
@@ -722,6 +749,7 @@ async def retrieve_context(query: str, n_results: int, search_query_override: st
     never kills the whole request.
     """
     try:
+        query = _sanitize_clinical_query(query)
         if search_query_override:
             # HyDE path — use the provided override directly, no decomposition
             # list() unpacks the cached tuple into a fresh mutable list for downstream use

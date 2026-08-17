@@ -112,7 +112,7 @@ body {
 /* ─── Text Selection ────────────────────────────────────────────────── */
 ::selection {
   background: var(--accent-alpha-30);
-  color: var(--accent);
+  color: inherit;
 }
 
 /* ─── Markdown Content Rendered by Apollo ───────────────────────────── */

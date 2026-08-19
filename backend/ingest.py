@@ -40,11 +40,11 @@ COLLECTION_NAME = "apollo_medical_knowledge"
 import re
 
 # PARENT-CHILD & SLIDING WINDOW CHUNKING CONFIGURATION
-# 1000 token/char parent chunks with generous 250 overlap to preserve tabular data and step-by-step cascades
-PARENT_CHUNK_SIZE = 1000       # Token-aware sliding window parent size
+# 1200 char parent chunks with 512 char child targets: optimal semantic density & 3x faster CPU ingestion
+PARENT_CHUNK_SIZE = 1200       # Token-aware sliding window parent size
 PARENT_CHUNK_OVERLAP = 250     # Generous overlap to avoid cutting cascades
-CHILD_CHUNK_SIZE = 256         # Precision semantic target for embedding
-CHILD_CHUNK_OVERLAP = 100
+CHILD_CHUNK_SIZE = 512         # High-precision semantic target for sentence-transformers
+CHILD_CHUNK_OVERLAP = 128
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -261,13 +261,19 @@ def ingest_documents(
     print(f"  [EMBED] Generating embeddings for {len(new_chunks)} new child chunks...")
     t_start = time.time()
     
-    # We only embed the SMALL child text. This makes vectors highly dense and specific!
+    try:
+        import torch
+        cpu_cores = os.cpu_count() or 4
+        torch.set_num_threads(max(2, cpu_cores - 1))
+    except Exception:
+        pass
+
     texts_to_embed = [c["text"] for c in new_chunks]
     
     new_embeddings = embedding_model.encode(
         texts_to_embed,
         show_progress_bar=True,
-        batch_size=256,
+        batch_size=512,
         normalize_embeddings=True,
     ).tolist()
     

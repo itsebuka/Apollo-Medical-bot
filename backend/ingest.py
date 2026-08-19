@@ -194,7 +194,7 @@ def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
         rel_path = file_path.relative_to(knowledge_dir)
         domain = rel_path.parent.name if rel_path.parent.name else "general"
         
-        print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})")
+        print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})", flush=True)
         
         if file_path.suffix.lower() == '.pdf':
             reader = PdfReader(file_path)

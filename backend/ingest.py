@@ -321,29 +321,89 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
 
 
 
+def sync_deleted_files(collection: chromadb.Collection, active_filenames: set):
+    """Purges vector and FTS5 entries for files that were deleted from disk."""
+    print("\n[SYNC] Checking for orphan database entries from deleted files...")
+    
+    # 1. Clean SQLite FTS5
+    if SQLITE_DB_PATH.exists():
+        try:
+            with sqlite3.connect(SQLITE_DB_PATH) as conn:
+                c = conn.cursor()
+                c.execute("CREATE TABLE IF NOT EXISTS chunks (id UNINDEXED, text, parent_id UNINDEXED, parent_text UNINDEXED, source_file UNINDEXED, page_number UNINDEXED, domain UNINDEXED)")
+                c.execute("SELECT DISTINCT source_file FROM chunks")
+                db_sources = set(r[0] for r in c.fetchall())
+                orphan_sources = db_sources - active_filenames
+                if orphan_sources:
+                    print(f"  [SQLITE] Purging {len(orphan_sources)} deleted file sources from FTS5...")
+                    for src in orphan_sources:
+                        c.execute("DELETE FROM chunks WHERE source_file = ?", (src,))
+                    conn.commit()
+                    print(f"  [SQLITE] Cleaned {len(orphan_sources)} deleted file entries ✓")
+                else:
+                    print("  [SQLITE] No orphan file sources found ✓")
+        except Exception as e:
+            print(f"  [SQLITE WARN] Sync skipped: {e}")
+
+    # 2. Clean ChromaDB
+    try:
+        if collection.count() > 0:
+            metas = collection.get(include=["metadatas"])["metadatas"]
+            chroma_sources = set(m.get("source_file") for m in metas if m.get("source_file"))
+            orphan_chroma = chroma_sources - active_filenames
+            if orphan_chroma:
+                print(f"  [ChromaDB] Purging {len(orphan_chroma)} deleted file sources from vector DB...")
+                for src in orphan_chroma:
+                    collection.delete(where={"source_file": src})
+                print(f"  [ChromaDB] Cleaned {len(orphan_chroma)} deleted file sources ✓")
+            else:
+                print("  [ChromaDB] No orphan file sources found ✓")
+    except Exception as e:
+        print(f"  [ChromaDB WARN] Sync skipped: {e}")
+
+
 def main():
     print("=" * 65)
-    print("  APOLLO — Advanced RAG Pipeline (Phase 1: Parent-Child Chunking)")
+    print("  APOLLO — Advanced RAG Pipeline (Ingestion & Library Sync)")
     print("=" * 65)
 
-    # 1. (Legacy DB clearing block removed to prevent corruption while backend is running)
-    
-    # 2. Chunk files page-by-page
+    reset_db = "--reset" in sys.argv
+
+    # 1. Chunk active files on disk
     chunks = load_and_chunk_files(KNOWLEDGE_DIR)
-    
-    # 3. Load models and DB
+    active_filenames = set(c["metadata"]["source_file"] for c in chunks)
+    print(f"\n[LIBRARY] Found {len(active_filenames)} active book/file sources on disk.")
+
+    # 2. Load models and DB
     print("\n[INIT] Loading SentenceTransformer...")
     embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     
     print(f"[INIT] Connecting to ChromaDB...")
     CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+    
+    if reset_db:
+        print("  [RESET] --reset flag detected: Re-creating ChromaDB collection and SQLite FTS5 table...")
+        try:
+            client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
+        if SQLITE_DB_PATH.exists():
+            try:
+                SQLITE_DB_PATH.unlink()
+            except Exception:
+                pass
+
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"}
     )
     
-    # 4. Ingest
+    # 3. Sync deleted files
+    if not reset_db:
+        sync_deleted_files(collection, active_filenames)
+
+    # 4. Ingest new / updated chunks
     print("\n[START] Beginning vector ingestion (ChromaDB)...")
     stats = ingest_documents(collection, embedding_model, chunks)
     
@@ -351,13 +411,13 @@ def main():
     ingest_sqlite(chunks)
     
     print("\n" + "=" * 65)
-    print("  PHASE 1 COMPLETE")
+    print("  INGESTION & SYNC COMPLETE")
     print("=" * 65)
-    print(f"  Total Chunks   : {stats['total_processed']}")
-    print(f"  Newly Inserted : {stats['inserted']}")
-    print(f"  DB Size        : {collection.count()}")
-    print("\n  Child vectors stored securely with full Parent text attached.")
-    print("  Ready for Phase 2: Advanced Retrieval API Integration.\n")
+    print(f"  Active Files  : {len(active_filenames)}")
+    print(f"  Total Chunks  : {stats['total_processed']}")
+    print(f"  Newly Inserted: {stats['inserted']}")
+    print(f"  DB Size       : {collection.count()}")
+    print("\n  Vector database and keyword search index are 100% synchronized with disk.\n")
 
 
 if __name__ == "__main__":

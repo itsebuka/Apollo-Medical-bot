@@ -177,7 +177,13 @@ def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
     # rglob enables recursive searching through subdirectories
     txt_files = list(knowledge_dir.rglob("*.txt"))
     pdf_files = list(knowledge_dir.rglob("*.pdf"))
-    all_files = sorted(txt_files + pdf_files)
+    raw_files = sorted(txt_files + pdf_files)
+
+    # Ignore temporary lock files (e.g. .~lock.filename.pdf# or ~$filename.pdf)
+    all_files = [
+        f for f in raw_files 
+        if not f.name.startswith(".~lock") and not f.name.startswith("~$") and not f.name.endswith("#")
+    ]
 
     if not all_files:
         print(f"[ERROR] No corpus files found in {knowledge_dir} (or its subdirectories)")

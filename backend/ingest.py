@@ -197,12 +197,18 @@ def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
         print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})", flush=True)
         
         if file_path.suffix.lower() == '.pdf':
-            reader = PdfReader(file_path)
-            for i, page in enumerate(reader.pages):
-                page_text = page.extract_text()
-                if page_text:
-                    page_chunks = build_parent_child_hierarchy(file_path.name, page_text, page_num=i+1, domain=domain)
-                    all_chunks.extend(page_chunks)
+            try:
+                reader = PdfReader(file_path)
+                for i, page in enumerate(reader.pages):
+                    try:
+                        page_text = page.extract_text()
+                    except Exception:
+                        page_text = None
+                    if page_text:
+                        page_chunks = build_parent_child_hierarchy(file_path.name, page_text, page_num=i+1, domain=domain)
+                        all_chunks.extend(page_chunks)
+            except Exception as fe:
+                print(f"  [PDF WARN] Could not open {file_path.name}: {fe}", flush=True)
         else:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()

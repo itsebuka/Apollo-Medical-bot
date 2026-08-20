@@ -26,3 +26,7 @@ tqdm==4.66.4                   # Progress bars for embedding generation
 httpx==0.27.0                  # Async HTTP client (used by FastAPI internally)
 pydantic==2.7.4                # Data validation (FastAPI uses this natively)
 pypdf==4.2.0                   # Pure Python offline PDF text extraction
+
+# ── Pipeline & Testing ────────────────────────────────────────────────────────
+pyyaml>=6.0                    # Required by pipeline.py to load clinical_protocol.yaml
+pytest>=8.0                    # Required for regression test suite (tests/)

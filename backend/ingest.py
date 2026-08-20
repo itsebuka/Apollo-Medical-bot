@@ -18,6 +18,10 @@ Features:
 import os
 import sys
 
+# Configure UTF-8 output encoding for Windows terminals
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # Ensure offline operation and single-threaded OpenBLAS memory stability on Windows
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"

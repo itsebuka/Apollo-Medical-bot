@@ -137,6 +137,7 @@ class ApolloResponse:
     section4: str = ""
     checks_passed: list[str] = field(default_factory=list)
     regeneration_count: int = 0
+    retrieved_chunk_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -501,6 +502,33 @@ def check_actionability(
     return True, "ok"
 
 
+def check_grounding_consistency(
+    text: str, retrieved_chunks: list[dict] | None, protocol: dict
+) -> tuple[bool, str]:
+    """1.5 — Grounding enforcement (retrieval <-> generation consistency).
+    Verifies that numeric thresholds, dosages, or key protocol steps output by the LLM
+    are grounded in the retrieved chunks or protocol config."""
+    if not retrieved_chunks:
+        return True, "ok (no chunks to verify against)"
+
+    combined_context = " ".join(c.get("text", "") for c in retrieved_chunks)
+
+    # 1. Check for respiratory thresholds cited: must be in context or protocol
+    for rate_str in re.findall(r"\b(\d+)\s*breaths?(?:\s*/?(?:per\s*)?min(?:ute)?)?\b", text, re.IGNORECASE):
+        if rate_str not in combined_context:
+            protocol_rates = {str(b["fast_breathing_threshold"]) for b in protocol.get("respiratory_rate_thresholds", [])}
+            if rate_str not in protocol_rates:
+                return False, f"Fabricated/ungrounded respiratory threshold: {rate_str} breaths/min"
+
+    # 2. Check for honey dosing: if honey is mentioned, dose must match context/protocol
+    if "honey" in text.lower() and ("battery" in combined_context.lower() or "button battery" in text.lower()):
+        for odd_dose in re.findall(r"\b(\d+)\s*(?:mL|ml|tsp|tablespoon|teaspoon)\s*(?:of\s*)?honey\b", text, re.IGNORECASE):
+            if odd_dose not in ["10", "2"]:
+                return False, f"Ungrounded honey dosage for battery ingestion: {odd_dose}"
+
+    return True, "ok"
+
+
 def _log_event(event_type: str, data: dict) -> None:
     """4.6 — Structured JSON event logging for audit trail and regression corpus."""
     event = {
@@ -519,6 +547,8 @@ def validate_and_repair(
     llm_output: str,
     sq: StructuredQuery,
     llm_retry_fn: Callable[[str, str], str] | None = None,
+    retrieved_chunks: list[dict] | None = None,
+    retrieved_chunk_ids: list[str] | None = None,
 ) -> ApolloResponse | Escalation:
     """
     Layer C — Post-Processing Pipeline Orchestrator.
@@ -532,6 +562,7 @@ def validate_and_repair(
       4.3 emergency_consistency   → HARD FAIL, NO RETRY — direct escalation
       4.4 age_band_consistency    → retry once with correction → escalate
       4.5 actionability           → retry once → escalate
+      4.6 grounding_consistency   → retry once with citation constraint → escalate
 
     llm_retry_fn(cleaned_input, corrective_hint) -> str | None
       When None (unit tests), skips retry and goes directly to escalation.
@@ -540,6 +571,7 @@ def validate_and_repair(
     current = llm_output
     checks_passed: list[str] = []
     regen_count = 0
+    chunk_ids = retrieved_chunk_ids or []
 
     def escalate(reason: str, check: str) -> Escalation:
         _log_event("ESCALATION", {
@@ -548,6 +580,7 @@ def validate_and_repair(
             "active_emergency": sq.active_emergency,
             "matched_red_flags": sq.matched_red_flags,
             "llm_preview": current[:300],
+            "retrieved_chunk_ids": chunk_ids,
         })
         return Escalation(
             content=ESCALATION_TEMPLATE,
@@ -599,6 +632,7 @@ def validate_and_repair(
             "check": "emergency_consistency", "reason": reason,
             "active_emergency": sq.active_emergency,
             "flags": sq.matched_red_flags, "llm_preview": current[:500],
+            "retrieved_chunk_ids": chunk_ids,
         })
         return escalate(reason, "check_emergency_consistency")  # NO retry
     checks_passed.append("emergency_consistency")
@@ -640,6 +674,21 @@ def validate_and_repair(
                 return escalate(f"Actionability failed after retry: {r2}", "check_actionability")
     checks_passed.append("actionability")
 
+    # ── 4.6 Grounding enforcement ─────────────────────────────────────────────
+    if retrieved_chunks:
+        ok, reason = check_grounding_consistency(current, retrieved_chunks, protocol)
+        if not ok:
+            logger.warning("[C6] Grounding FAIL: %s", reason)
+            _log_event("CHECK_FAIL", {"check": "grounding_consistency", "reason": reason})
+            hint = f"CORRECTION — your response contains ungrounded clinical values: {reason}. Cite only values from the provided clinical context."
+            repaired = retry(hint)
+            if repaired:
+                current = repaired
+                ok2, r2 = check_grounding_consistency(current, retrieved_chunks, protocol)
+                if not ok2:
+                    return escalate(f"Grounding check failed after retry: {r2}", "check_grounding_consistency")
+        checks_passed.append("grounding_consistency")
+
     # ── Prune trailing overflow after Section 4 ───────────────────────────────
     s4m = re.search(r"(###\s*4\.\s*Likely Causes.*)", current, re.DOTALL | re.IGNORECASE)
     if s4m:
@@ -653,6 +702,7 @@ def validate_and_repair(
     _log_event("SUCCESS", {
         "checks_passed": checks_passed, "regen_count": regen_count,
         "active_emergency": sq.active_emergency,
+        "retrieved_chunk_ids": chunk_ids,
     })
 
     return ApolloResponse(
@@ -663,4 +713,5 @@ def validate_and_repair(
         section4=sections.get("4", ""),
         checks_passed=checks_passed,
         regeneration_count=regen_count,
+        retrieved_chunk_ids=chunk_ids,
     )

@@ -1,0 +1,65 @@
+﻿name: Apollo CI Pipeline & Guardrail Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-guardrail-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml pytest pydantic fastapi httpx
+
+      - name: Run Apollo Pipeline Regression Test Suite
+        run: |
+          python -m pytest tests/test_apollo_pipeline.py -v --tb=short
+
+      - name: Clinical Protocol Change Audit
+        run: |
+          # Determine commit range
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+            PR_BODY="${{ github.event.pull_request.body }}"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            COMMIT_MSGS=$(git log --format=%B ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+            FULL_TEXT="$PR_TITLE $PR_BODY $COMMIT_MSGS"
+          else
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+              FULL_TEXT=$(git log -1 --format=%B HEAD)
+            else
+              CHANGED_FILES=""
+              FULL_TEXT=""
+            fi
+          fi
+
+          PROTOCOL_CHANGED=$(echo "$CHANGED_FILES" | grep -F "config/clinical_protocol.yaml" || true)
+          APP_CODE_CHANGED=$(echo "$CHANGED_FILES" | grep -E "^(backend/app|tests)/" || true)
+
+          if [ -n "$PROTOCOL_CHANGED" ] && [ -n "$APP_CODE_CHANGED" ]; then
+            echo "Both clinical_protocol.yaml and application code were modified."
+            if echo "$FULL_TEXT" | grep -q "CLINICAL-REVIEWED-BY:"; then
+              echo "✅ Clinical attribution found: CLINICAL-REVIEWED-BY present."
+            else
+              echo "❌ CI ERROR: config/clinical_protocol.yaml was modified alongside application code."
+              echo "Per task specification §2, the PR description or commit message MUST contain 'CLINICAL-REVIEWED-BY: <Clinician Name>'."
+              exit 1
+            fi
+          else
+            echo "✅ Protocol change audit passed (no un-attributed joint protocol/app modifications)."
+          fi

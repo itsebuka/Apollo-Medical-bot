@@ -1,4 +1,4 @@
-﻿"""
+"""
 Apollo Clinical Triage — Regression Test Suite
 ===============================================
 Tests the deterministic pipeline (pipeline.py) in isolation.
@@ -481,12 +481,16 @@ class TestValidateAndRepair:
 class TestAdversarialInputs:
     def test_track_label_mid_sentence_not_in_output(self):
         """test_no_track_question_leakage — adversarial: label embedded mid-sentence."""
-        raw = "Patient presenting (FOR TRACK 2) with fever and cough"
+        raw = "my baby (FOR TRACK 1, QUESTION 2) is having trouble breathing"
         sq = preprocess_query(raw)
-        # Even if the prefix wasn't stripped (mid-sentence), the post-processor
-        # metadata check must catch it if the LLM echoes it
+        # Preprocessor must strip it directly
+        assert "TRACK" not in sq.cleaned_input
+        assert "QUESTION" not in sq.cleaned_input
+        assert "having trouble breathing" in sq.cleaned_input
+
+        # Even if an uncleaned string reached the post-processor, metadata check must catch it
         protocol = load_clinical_protocol()
-        text_with_leak = _make_valid_response(section4="This was assessed under FOR TRACK 2 conditions.")
+        text_with_leak = _make_valid_response(section4="This was assessed under FOR TRACK 1, QUESTION 2 conditions.")
         ok, reason = check_metadata_leakage(text_with_leak, raw, protocol)
         assert not ok
 

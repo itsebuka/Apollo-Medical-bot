@@ -173,7 +173,7 @@ def build_parent_child_hierarchy(
     parent_chunks = split_text(text, PARENT_CHUNK_SIZE, PARENT_CHUNK_OVERLAP)
 
     for p_idx, parent_text in enumerate(parent_chunks):
-        parent_id = hashlib.md5(f"{filename}_{page_num}_{p_idx}_{parent_text[:40]}".encode("utf-8")).hexdigest()
+        parent_id = hashlib.md5(f"{filename}_{page_num}_{p_idx}_{parent_text}".encode("utf-8")).hexdigest()
         chunk_age_band = age_band_override or infer_age_band(parent_text)
         chunk_condition = condition_override or infer_condition_substance(parent_text)
 
@@ -460,7 +460,8 @@ def main():
         # 1. Ingest Authoritative Clinical Protocol Chunks
         print("\n[STEP 1/2] Indexing clinical_protocol.yaml reference chunks...", flush=True)
         proto_chunks = load_protocol_chunks()
-        new_proto = [chk for chk in proto_chunks if chk["id"] not in existing_ids]
+        new_proto_map = {chk["id"]: chk for chk in proto_chunks if chk["id"] not in existing_ids}
+        new_proto = list(new_proto_map.values())
         if new_proto:
             texts = [c["text"] for c in new_proto]
             embeddings = embedding_model.encode(texts, normalize_embeddings=True).tolist()

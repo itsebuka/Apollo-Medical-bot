@@ -1,0 +1,262 @@
+﻿# =============================================================================
+# Apollo Clinical Protocol Configuration
+# =============================================================================
+# WARNING: CLINICIAN SIGN-OFF REQUIRED BEFORE PRODUCTION DEPLOYMENT
+# Per task spec §7, all clinical values must be reviewed by a licensed clinician
+# or clinical advisory board before this backend serves real users.
+#
+# CI RULE: This file must NOT be modified in the same commit as application
+# code unless the commit message contains:
+#     CLINICAL-REVIEWED-BY: <clinician name>
+# Enforced by .git/hooks/pre-commit.
+# =============================================================================
+
+version: "1.0.0"
+last_reviewed_by: "AWAITING CLINICIAN SIGN-OFF"
+last_reviewed_date: "2026-08-20"
+sources:
+  - "WHO/UNICEF IMCI Integrated Management of Childhood Illness, 2014"
+  - "WHO Pocket Book of Hospital Care for Children, 2nd Ed."
+  - "American Academy of Pediatrics Clinical Practice Guidelines"
+  - "NCBI Esposito et al. 2020, Button Battery Ingestion"
+
+respiratory_rate_thresholds:
+  - band: "neonatal"
+    age_min_months: 0
+    age_max_months: 2
+    fast_breathing_threshold: 60
+    label: "<2 months: >=60 breaths/min"
+  - band: "young_infant"
+    age_min_months: 2
+    age_max_months: 12
+    fast_breathing_threshold: 50
+    label: "2-11 months: >=50 breaths/min"
+  - band: "toddler"
+    age_min_months: 12
+    age_max_months: 60
+    fast_breathing_threshold: 40
+    label: "1-5 years: >=40 breaths/min"
+
+active_red_flag_phrases:
+  - "chest indrawing"
+  - "chest in-drawing"
+  - "chest in drawing"
+  - "sucking in ribs"
+  - "retractions"
+  - "intercostal retractions"
+  - "subcostal retractions"
+  - "too weak to nurse"
+  - "too weak to feed"
+  - "too weak to drink"
+  - "cannot breathe"
+  - "not breathing"
+  - "stopped breathing"
+  - "turning blue"
+  - "cyanosis"
+  - "blue lips"
+  - "face drooping"
+  - "facial droop"
+  - "arm weakness"
+  - "slurred speech"
+  - "cannot speak"
+  - "worst headache"
+  - "thunderclap headache"
+  - "loss of consciousness"
+  - "unconscious"
+  - "unresponsive"
+  - "passed out"
+  - "collapsed"
+  - "seizure"
+  - "convulsion"
+  - "fitting"
+  - "won't wake up"
+  - "will not wake up"
+  - "altered mental status"
+  - "chest pain"
+  - "chest tightness"
+  - "chest pressure"
+  - "crushing chest"
+  - "heart attack"
+  - "palpitations"
+  - "eclampsia"
+  - "pre-eclampsia"
+  - "vaginal bleeding"
+  - "postpartum bleeding"
+  - "heavy bleeding after delivery"
+  - "placenta"
+  - "button battery"
+  - "swallowed battery"
+  - "ingested battery"
+  - "coin battery"
+  - "overdose"
+  - "swallowed tablets"
+  - "took too many"
+  - "poisoning"
+  - "pesticide"
+  - "shock"
+  - "sepsis"
+  - "cold and clammy"
+  - "very pale"
+  - "rapid pulse"
+  - "severe bleeding"
+  - "uncontrolled bleeding"
+
+substance_protocols:
+  button_battery:
+    emergency: true
+    induce_vomiting: false
+    npo: true
+    honey_protocol:
+      eligible_min_age_months: 12
+      eligible_max_hours_since_ingestion: 12
+      dose_ml: 10
+      dose_tsp: 2
+      frequency_minutes: 10
+      max_doses: 6
+      warning: "Honey is CONTRAINDICATED in children under 12 months (infant botulism risk)."
+    instructions: "Go to the nearest emergency room immediately. Do NOT induce vomiting. Keep NPO. If child is >=12 months AND ingestion <12h ago: give 10mL (2tsp) honey every 10min (max 6 doses) en route ONLY if available. Do NOT give honey to infants under 12 months."
+
+  paracetamol_overdose:
+    emergency: true
+    induce_vomiting: false
+    treatment: "N-Acetylcysteine (NAC)"
+    treatment_window_hours: 8
+    instructions: "Go to the nearest emergency room immediately. N-Acetylcysteine (NAC) is most effective within 8 hours of ingestion. Bring the medication container. Do NOT induce vomiting."
+
+  general_ingestion:
+    emergency: true
+    induce_vomiting: false
+    instructions: "Go to the nearest emergency room immediately. Bring the container or substance if safe to do so. Do NOT induce vomiting unless directly instructed by Poison Control or emergency services."
+
+emergency_confirmation_phrases:
+  - "medical emergency"
+  - "emergency"
+  - "immediate"
+  - "go to hospital"
+  - "hospital now"
+  - "seek immediate"
+  - "call emergency"
+  - "do not wait"
+  - "urgent"
+  - "emergency room"
+  - "ER"
+  - "A&E"
+  - "ambulance"
+
+unsafe_advice_deny_patterns:
+  - "continue nursing"
+  - "continue breastfeeding"
+  - "continue breast feeding"
+  - "oral fluids"
+  - "oral rehydration"
+  - "monitor at home"
+  - "see how it goes"
+  - "see how they do"
+  - "reassess in"
+  - "watch and wait"
+  - "keep an eye"
+  - "observe for"
+  - "check back in"
+  - "come back if"
+
+caregiver_observable_signs:
+  - "wet diaper"
+  - "urine"
+  - "tears"
+  - "crying"
+  - "alertness"
+  - "responsive"
+  - "skin pinch"
+  - "turgor"
+  - "breathing"
+  - "breaths per minute"
+  - "colour"
+  - "color"
+  - "lips"
+  - "tongue"
+  - "fontanelle"
+  - "soft spot"
+  - "temperature"
+  - "fever"
+  - "rash"
+  - "swelling"
+  - "vomiting"
+  - "stool"
+  - "diarrhea"
+
+vaccine_whitelist:
+  - "rotavirus"
+  - "pentavalent"
+  - "DTP"
+  - "DPT"
+  - "BCG"
+  - "hepatitis B"
+  - "HepB"
+  - "measles"
+  - "yellow fever"
+  - "meningococcal"
+  - "pneumococcal"
+  - "HPV"
+  - "influenza"
+  - "typhoid"
+  - "polio"
+  - "OPV"
+  - "IPV"
+  - "cholera"
+  - "rabies"
+
+medication_whitelist:
+  - "paracetamol"
+  - "acetaminophen"
+  - "ibuprofen"
+  - "amoxicillin"
+  - "ampicillin"
+  - "azithromycin"
+  - "metronidazole"
+  - "artemether"
+  - "lumefantrine"
+  - "artesunate"
+  - "ORS"
+  - "oral rehydration solution"
+  - "zinc"
+  - "vitamin A"
+  - "N-Acetylcysteine"
+  - "NAC"
+  - "adrenaline"
+  - "epinephrine"
+  - "salbutamol"
+  - "honey"
+
+lab_test_deny_list:
+  - "electrolyte level"
+  - "electrolytes"
+  - "serum sodium"
+  - "serum potassium"
+  - "blood culture"
+  - "stool culture"
+  - "lumbar puncture"
+  - "spinal tap"
+  - "CBC"
+  - "complete blood count"
+  - "white blood cell count"
+  - "platelet count"
+  - "liver function"
+  - "kidney function"
+  - "creatinine"
+  - "urea"
+  - "arterial blood gas"
+  - "ABG"
+  - "blood glucose level"
+  - "serum bilirubin"
+
+metadata_deny_patterns:
+  - "TRACK \\d"
+  - "QUESTION \\d"
+  - "^Q:"
+  - "^A:"
+  - "benchmark"
+  - "test case"
+  - "FOR TRACK"
+  - "APOLLO TESTING"
+  - "Generated:\\s*\\d"
+  - "Apollo Triage Summary"

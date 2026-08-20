@@ -538,8 +538,15 @@ def _predict_cross_encoder(query: str, candidates: list[dict]) -> list[dict]:
 
 
 @functools.lru_cache(maxsize=100)
-def _sync_candidate_retrieval(query: str, n_results: int, search_query_override: str | None = None, domain_filter: str | None = None) -> tuple:
-    """Hybrid dense + sparse retrieval with RRF fusion. LRU-cached by (query, n_results, override, domain_filter).
+def _sync_candidate_retrieval(
+    query: str,
+    n_results: int,
+    search_query_override: str | None = None,
+    domain_filter: str | None = None,
+    age_band_filter: str | None = None,
+) -> tuple:
+    """Hybrid dense + sparse retrieval with RRF fusion and metadata pre-filtering.
+    LRU-cached by (query, n_results, override, domain_filter, age_band_filter).
 
     Returns a TUPLE (not a list) so the lru_cache holds an immutable reference.
     Callers must wrap with list() before mutating or slicing.
@@ -556,13 +563,22 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
     total_docs = config.chroma_collection_instance.count()
     search_k = min(max(12, n_results * 4), max(1, total_docs))
 
-    # Build optional ChromaDB where filter for domain scoping
-    # When domain_filter is set (e.g. 'virology'), only chunks from that domain are retrieved.
-    # This makes the scope dropdown in the UI functionally meaningful.
+    # ── Build Server-Side Metadata Filters ──────────────────────────────────
+    # Enforces retrieval-time filtering (Part 1.2): only chunks matching patient's
+    # verified age_band (or 'all') and domain are considered.
     chroma_where: dict | None = None
+    where_clauses: list[dict] = []
+
     if domain_filter and domain_filter.lower() not in ('all', ''):
-        chroma_where = {"domain": {"$eq": domain_filter.lower()}}
-        logger.info(f"[Retrieval] Domain filter active: domain='{domain_filter}'")
+        where_clauses.append({"domain": {"$eq": domain_filter.lower()}})
+
+    if age_band_filter and age_band_filter.lower() not in ('all', '', 'null'):
+        where_clauses.append({"age_band": {"$in": [age_band_filter.lower(), "all"]}})
+
+    if len(where_clauses) == 1:
+        chroma_where = where_clauses[0]
+    elif len(where_clauses) > 1:
+        chroma_where = {"$and": where_clauses}
 
     # ── 1. DENSE SEARCH (ChromaDB) ──────────────────────────────────────────
     try:
@@ -600,86 +616,59 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
             "text": meta.get("parent_text", ""),
             "source": f"{meta.get('source_file', 'unknown')} (Page {meta.get('page_number', '?')})",
             "similarity": round(1 - dist, 4),
+            "id": parent_id,
         })
 
     # ── 2. SPARSE SEARCH (SQLite FTS5) ──────────────────────────────────────
-    # Use a context manager so the connection is ALWAYS closed, even on exception
     sqlite_parents = []
     try:
-        # Strip quotes/apostrophes and keep only alphanumeric tokens
         raw_tokens = [w for w in search_text.replace('"', '').replace("'", "").split() if w.isalnum()]
         if raw_tokens:
-            # Build an AND-conjunction query: all tokens must be present in the chunk.
-            # This prevents "hepatitis b virus" from matching chunks that only contain "b"
-            # (FTS5 bare word list is OR by default — AND is correct for clinical precision).
             fts_and_query = " AND ".join(raw_tokens)
 
             with sqlite3.connect(config.REPO_ROOT / "backend" / "fts.db") as conn:
                 c = conn.cursor()
-                # Check if domain column exists for backwards-compatible domain filtering
-                use_domain = False
-                if domain_filter and domain_filter.lower() not in ('all', ''):
-                    try:
-                        c.execute("PRAGMA table_info(chunks)")
-                        cols = [r[1] for r in c.fetchall()]
-                        if "domain" in cols:
-                            use_domain = True
-                    except Exception:
-                        use_domain = False
+                c.execute("PRAGMA table_info(chunks)")
+                cols = [r[1] for r in c.fetchall()]
+                has_domain = "domain" in cols
+                has_age_band = "age_band" in cols
 
-                # First attempt: strict AND — all terms must appear
-                if use_domain:
-                    c.execute('''
-                        SELECT parent_text, source_file, page_number
-                        FROM chunks
-                        WHERE chunks MATCH ? AND domain = ?
-                        ORDER BY rank
-                        LIMIT ?
-                    ''', (fts_and_query, domain_filter.lower(), search_k))
-                else:
-                    c.execute('''
-                        SELECT parent_text, source_file, page_number
-                        FROM chunks
-                        WHERE chunks MATCH ?
-                        ORDER BY rank
-                        LIMIT ?
-                    ''', (fts_and_query, search_k))
+                sql_where = ["chunks MATCH ?"]
+                params = [fts_and_query]
+
+                if has_domain and domain_filter and domain_filter.lower() not in ('all', ''):
+                    sql_where.append("domain = ?")
+                    params.append(domain_filter.lower())
+
+                if has_age_band and age_band_filter and age_band_filter.lower() not in ('all', '', 'null'):
+                    sql_where.append("(age_band = ? OR age_band = 'all')")
+                    params.append(age_band_filter.lower())
+
+                query_sql = f"SELECT parent_text, source_file, page_number, parent_id FROM chunks WHERE {' AND '.join(sql_where)} ORDER BY rank LIMIT ?"
+                params.append(search_k)
+
+                c.execute(query_sql, tuple(params))
                 rows = c.fetchall()
 
-                # Fallback: if AND returned nothing (e.g. very rare multi-word combo),
-                # retry with the original OR-style bare query to avoid empty sparse results
+                # Fallback: if AND returned nothing, retry with OR
                 if not rows and len(raw_tokens) > 1:
                     fts_or_query = " ".join(raw_tokens)
-                    logger.info(f"[FTS5] AND query returned 0 results — retrying with OR fallback")
-                    if use_domain:
-                        c.execute('''
-                            SELECT parent_text, source_file, page_number
-                            FROM chunks
-                            WHERE chunks MATCH ? AND domain = ?
-                            ORDER BY rank
-                            LIMIT ?
-                        ''', (fts_or_query, domain_filter.lower(), search_k))
-                    else:
-                        c.execute('''
-                            SELECT parent_text, source_file, page_number
-                            FROM chunks
-                            WHERE chunks MATCH ?
-                            ORDER BY rank
-                            LIMIT ?
-                        ''', (fts_or_query, search_k))
+                    params[0] = fts_or_query
+                    c.execute(query_sql, tuple(params))
                     rows = c.fetchall()
 
                 seen_sqlite_parents = set()
                 for row in rows:
                     p_text = row[0]
+                    p_id = row[3] if len(row) > 3 else str(hash(p_text))
                     if p_text in seen_sqlite_parents:
                         continue
                     seen_sqlite_parents.add(p_text)
                     sqlite_parents.append({
                         "text": p_text,
                         "source": f"{row[1]} (Page {row[2]})",
-                        # Use 0.75 (not 0.99) so FTS hits don't always dominate the RRF merge
                         "similarity": 0.75,
+                        "id": p_id,
                     })
     except Exception as e:
         logger.error(f"[FTS5] Sparse search failed: {e}")
@@ -701,55 +690,27 @@ def _sync_candidate_retrieval(query: str, n_results: int, search_query_override:
             merged_contexts[key] = ctx
 
     sorted_keys = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
-    # Return a TUPLE so the lru_cache holds an immutable reference — never a mutable list
     return tuple(merged_contexts[key] for key in sorted_keys[:search_k])
 
 
-def _sanitize_clinical_query(query: str) -> str:
+async def retrieve_context(
+    query: str,
+    n_results: int,
+    search_query_override: str | None = None,
+    domain_filter: str | None = None,
+    structured_query: Any = None,
+) -> list[dict]:
     """
-    Strips noise preambles like 'second attemp at asking the question:',
-    'Apollo Triage Summary', previous output paste-backs, or conversational intros
-    to isolate the core clinical question for high-precision RAG vector retrieval.
-    """
-    clean_q = query.strip()
-    
-    # If the user pasted back an old Apollo output, extract the actual question or header line
-    if "Apollo Triage Summary" in clean_q or "Clinical Context Analysis" in clean_q:
-        lines = [l.strip() for l in clean_q.splitlines() if l.strip()]
-        for l in lines:
-            if l.lower().startswith("question:") or l.lower().startswith("query:") or "biochemical mechanism" in l.lower():
-                clean_q = re.sub(r"^(question|query):\s*", "", l, flags=re.IGNORECASE).strip()
-                break
-        else:
-            for l in lines:
-                if "apollo triage summary" not in l.lower() and "generated:" not in l.lower():
-                    clean_q = l
-                    break
-
-    # Strip common attempt prefixes
-    clean_q = re.sub(r"^(second|third|another)?\s*(attemp|attempt|try)\s*(at|of)?\s*(asking|running)?\s*(the)?\s*(question|query)?:?\s*", "", clean_q, flags=re.IGNORECASE)
-
-    return clean_q.strip() or query
-
-
-async def retrieve_context(query: str, n_results: int, search_query_override: str | None = None, domain_filter: str | None = None) -> list[dict]:
-    """
-    Advanced Hybrid Retrieval with Multi-Query Decomposition and Async Cross-Encoder Re-Ranking.
-
-    For comparison/contrast queries, decomposes into entity-level sub-queries, retrieves
-    candidates for each, merges and deduplicates the pool, then runs the cross-encoder
-    against the *original* query to select the truly best chunks.
-
-    For all other queries, falls back to single-query retrieval (no overhead).
-    All sub-operations are individually wrapped in try/except so a partial failure
-    never kills the whole request.
+    Advanced Hybrid Retrieval with Metadata Pre-Filtering and Calibrated Cross-Encoder Re-Ranking.
     """
     try:
         query = _sanitize_clinical_query(query)
+        age_band_filter = None
+        if structured_query and hasattr(structured_query, "age_band") and structured_query.age_band:
+            age_band_filter = structured_query.age_band.get("band")
+
         if search_query_override:
-            # HyDE path — use the provided override directly, no decomposition
-            # list() unpacks the cached tuple into a fresh mutable list for downstream use
-            candidates = list(_sync_candidate_retrieval(query, n_results, search_query_override, domain_filter))
+            candidates = list(_sync_candidate_retrieval(query, n_results, search_query_override, domain_filter, age_band_filter))
         else:
             try:
                 sub_queries = decompose_comparative_query(query)
@@ -758,15 +719,13 @@ async def retrieve_context(query: str, n_results: int, search_query_override: st
                 sub_queries = [query]
 
             if len(sub_queries) == 1:
-                # Fast path: single direct retrieval (no comparative keywords detected)
-                candidates = list(_sync_candidate_retrieval(query, n_results, None, domain_filter))
+                candidates = list(_sync_candidate_retrieval(query, n_results, None, domain_filter, age_band_filter))
             else:
-                # Multi-query path: retrieve per sub-query, merge, deduplicate
                 logger.info(f"[MultiQuery] Decomposed into {len(sub_queries)} sub-queries for comparative retrieval")
                 merged: dict[str, dict] = {}
                 for sub_q in sub_queries:
                     try:
-                        sub_candidates = list(_sync_candidate_retrieval(sub_q, n_results, None, domain_filter))
+                        sub_candidates = list(_sync_candidate_retrieval(sub_q, n_results, None, domain_filter, age_band_filter))
                         for c in sub_candidates:
                             key = c['text'][:120]
                             if key not in merged:
@@ -775,19 +734,35 @@ async def retrieve_context(query: str, n_results: int, search_query_override: st
                         logger.error(f"[MultiQuery] Sub-query '{sub_q[:40]}' failed: {e} — skipping")
                         continue
                 candidates = list(merged.values())
-                logger.info(f"[MultiQuery] Merged pool: {len(candidates)} unique candidates before reranking")
 
         if not candidates:
             return []
 
+        # ── Calibrated Cross-Encoder Reranking ──────────────────────────────
+        # Always rerank for active emergencies or ambiguous top candidate scores.
+        # Fast-track only when candidate 1 has high confidence (>0.85) and large separation (>0.15).
+        is_emergency = structured_query and getattr(structured_query, "active_emergency", False)
+        high_confidence_single_match = False
+
+        if not is_emergency and len(candidates) >= 2:
+            sim1 = candidates[0].get("similarity", 0.0)
+            sim2 = candidates[1].get("similarity", 0.0)
+            if sim1 >= 0.85 and (sim1 - sim2) >= 0.15:
+                high_confidence_single_match = True
+
+        if high_confidence_single_match:
+            logger.info("[Reranker] Fast-track: high-confidence single match (skipped cross-encoder).")
+            return candidates[:n_results]
+
         loop = asyncio.get_running_loop()
         with time_profiler("Async Cross-Encoder Re-Ranking"):
-            # Always rerank against the ORIGINAL query for faithfulness
             re_ranked = await loop.run_in_executor(None, _predict_cross_encoder, query, candidates)
 
         return re_ranked[:n_results]
 
     except Exception as e:
+        logger.error(f"[retrieve_context] Unhandled error: {e} — returning empty context")
+        return []
         logger.error(f"[retrieve_context] Unhandled error: {e} — returning empty context")
         return []
 
@@ -1040,7 +1015,7 @@ async def chat(request: ChatRequest):
         domain_filter = request.domain_filter if request.domain_filter and request.domain_filter != 'all' else None
         if domain_filter:
             logger.info(f"[CHAT] Scope filter active: domain='{domain_filter}'")
-        context_chunks = await retrieve_context(latest_query, request.n_results, domain_filter=domain_filter)
+        context_chunks = await retrieve_context(latest_query, request.n_results, domain_filter=domain_filter, structured_query=structured_query)
         top_sim = max([c.get("similarity", 0.0) for c in context_chunks]) if context_chunks else 0.0
 
         # ── Step 2: Lazy HyDE Expansion (Only if baseline is poor AND use_hyde=True) ─────
@@ -1053,7 +1028,7 @@ async def chat(request: ChatRequest):
             with time_profiler("HyDE Generation"):
                 hyde_text = await generate_hyde(latest_query)
                 if hyde_text and hyde_text != latest_query:
-                    hyde_chunks = await retrieve_context(latest_query, request.n_results, search_query_override=hyde_text, domain_filter=domain_filter)
+                    hyde_chunks = await retrieve_context(latest_query, request.n_results, search_query_override=hyde_text, domain_filter=domain_filter, structured_query=structured_query)
                     hyde_top_sim = max([c.get("similarity", 0.0) for c in hyde_chunks]) if hyde_chunks else 0.0
                     if hyde_top_sim > top_sim:
                         logger.info(f"[HyDE] Rescued query! Improved similarity from {top_sim:.4f} to {hyde_top_sim:.4f}")
@@ -1151,7 +1126,8 @@ async def chat(request: ChatRequest):
         # Apply the full deterministic pipeline to the fully assembled response
         raw_full = "".join(full_response_parts)
         if raw_full.strip():
-            result = validate_and_repair(raw_full, structured_query)
+            chunk_ids = [c.get("id", c.get("source", "chk")) for c in context_chunks]
+            result = validate_and_repair(raw_full, structured_query, retrieved_chunks=context_chunks, retrieved_chunk_ids=chunk_ids)
             scrubbed = result.content  # Works for both ApolloResponse and Escalation
             if isinstance(result, Escalation):
                 logger.error(

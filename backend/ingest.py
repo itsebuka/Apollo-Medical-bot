@@ -18,9 +18,12 @@ Features:
 import os
 import sys
 
-# Ensure offline operation using local huggingface model cache
+# Ensure offline operation and single-threaded OpenBLAS memory stability on Windows
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 import time
 import hashlib
@@ -300,72 +303,69 @@ def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
         seen_bases.add(base_name)
         filtered_files.append(f)
 
-    for file_path in filtered_files:
-        rel_path = file_path.relative_to(knowledge_dir)
-        domain = rel_path.parent.name if rel_path.parent.name else "general"
-        print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})", flush=True)
+def process_and_index_file(
+    file_path: Path,
+    knowledge_dir: Path,
+    collection: chromadb.Collection,
+    embedding_model: SentenceTransformer,
+    existing_ids: set,
+    conn: sqlite3.Connection,
+) -> int:
+    """Chunks, embeds, and indexes a single document file with real-time feedback."""
+    rel_path = file_path.relative_to(knowledge_dir)
+    domain = rel_path.parent.name if rel_path.parent.name else "general"
+    chunks: List[Dict[str, Any]] = []
 
-        if file_path.suffix.lower() == '.pdf':
-            try:
-                reader = PdfReader(file_path)
-                for i, page in enumerate(reader.pages):
-                    try:
-                        page_text = page.extract_text()
-                    except Exception:
-                        page_text = None
-                    if page_text:
-                        page_chunks = build_parent_child_hierarchy(file_path.name, page_text, page_num=i+1, domain=domain)
-                        all_chunks.extend(page_chunks)
-            except Exception as fe:
-                print(f"  [PDF WARN] Could not open {file_path.name}: {fe}", flush=True)
-        else:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            section_size = 3000
-            sections = [content[i:i + section_size].strip() for i in range(0, len(content), section_size)]
-            for pseudo_page, section_text in enumerate(sections, start=1):
-                if not section_text:
-                    continue
-                section_chunks = build_parent_child_hierarchy(file_path.name, section_text, page_num=pseudo_page, domain=domain)
-                all_chunks.extend(section_chunks)
+    if file_path.suffix.lower() == '.pdf':
+        try:
+            reader = PdfReader(file_path)
+            total_pages = len(reader.pages)
+            for i, page in enumerate(reader.pages):
+                try:
+                    page_text = page.extract_text()
+                except Exception:
+                    page_text = None
+                if page_text:
+                    page_chunks = build_parent_child_hierarchy(file_path.name, page_text, page_num=i+1, domain=domain)
+                    chunks.extend(page_chunks)
+        except Exception as fe:
+            print(f"    ⚠ Could not open PDF {file_path.name}: {fe}", flush=True)
+            return 0
+    else:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        section_size = 3000
+        sections = [content[i:i + section_size].strip() for i in range(0, len(content), section_size)]
+        for pseudo_page, section_text in enumerate(sections, start=1):
+            if not section_text:
+                continue
+            section_chunks = build_parent_child_hierarchy(file_path.name, section_text, page_num=pseudo_page, domain=domain)
+            chunks.extend(section_chunks)
 
-    print(f"\n  Total Child Chunks generated: {len(all_chunks)}")
-    return all_chunks
+    if not chunks:
+        return 0
 
-
-def ingest_documents(collection: chromadb.Collection, embedding_model: SentenceTransformer, chunks: List[Dict[str, Any]]) -> Dict[str, int]:
-    stats = {"total_processed": len(chunks), "inserted": 0, "skipped": 0}
-    existing_ids = set()
-    if collection.count() > 0:
-        existing_results = collection.get(include=[])
-        existing_ids = set(existing_results["ids"])
-
-    unique_new_chunks = {c["id"]: c for c in chunks if c["id"] not in existing_ids}
-    new_chunks = list(unique_new_chunks.values())
-    stats["skipped"] = len(chunks) - len(new_chunks)
-
+    # Filter out already existing chunks
+    new_chunks = [c for c in chunks if c["id"] not in existing_ids]
     if not new_chunks:
-        print("  [DB] All chunks already exist. Skipping.")
-        return stats
+        print(f"    ✓ All {len(chunks)} chunks already up to date.", flush=True)
+        return 0
 
-    print(f"  [EMBED] Generating embeddings for {len(new_chunks)} new child chunks...")
-    t_start = time.time()
+    # Embed new chunks in batches
     texts_to_embed = [c["text"] for c in new_chunks]
     new_embeddings = embedding_model.encode(
         texts_to_embed,
-        show_progress_bar=True,
-        batch_size=512,
+        batch_size=256,
+        show_progress_bar=False,
         normalize_embeddings=True,
     ).tolist()
 
     for i, chunk in enumerate(new_chunks):
         chunk["embedding"] = new_embeddings[i]
+        existing_ids.add(chunk["id"])
 
-    elapsed = time.time() - t_start
-    print(f"  [EMBED] Done in {elapsed:.1f}s")
-
-    batch_size = 5000
-    print(f"[INIT] Saving {len(new_chunks)} chunks to ChromaDB in batches of {batch_size}...")
+    # Commit to ChromaDB
+    batch_size = 2000
     for i in range(0, len(new_chunks), batch_size):
         batch = new_chunks[i:i+batch_size]
         collection.add(
@@ -374,12 +374,62 @@ def ingest_documents(collection: chromadb.Collection, embedding_model: SentenceT
             documents=[c["text"] for c in batch],
             metadatas=[c["metadata"] for c in batch],
         )
-    stats["inserted"] = len(new_chunks)
-    return stats
+
+    # Commit to SQLite FTS5
+    c = conn.cursor()
+    c.executemany('''
+        INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain, age_band, condition_substance, source_doc, source_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [(
+        chk["id"],
+        chk["text"],
+        chk["metadata"]["parent_id"],
+        chk["metadata"]["parent_text"],
+        chk["metadata"]["source_file"],
+        str(chk["metadata"]["page_number"]),
+        chk["metadata"].get("domain", "GENERAL"),
+        chk["metadata"].get("age_band", "all"),
+        chk["metadata"].get("condition_substance", "general"),
+        chk["metadata"].get("source_doc", chk["metadata"]["source_file"]),
+        chk["metadata"].get("source_version", "1.0.0"),
+    ) for chk in new_chunks])
+    conn.commit()
+
+    return len(new_chunks)
 
 
-def ingest_sqlite(chunks: List[Dict[str, Any]]):
-    """Inserts chunks into SQLite FTS5 table with full metadata columns."""
+def main():
+    print("=" * 65)
+    print("  APOLLO — Advanced RAG Pipeline (Progressive Ingestion & Sync)")
+    print("=" * 65)
+
+    reset_db = "--reset" in sys.argv
+
+    print("\n[INIT] Loading local SentenceTransformer embeddings...")
+    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    print("  ✓ SentenceTransformer loaded.")
+
+    print("\n[INIT] Connecting to ChromaDB & SQLite FTS5...")
+    CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+
+    if reset_db:
+        print("  [RESET] --reset detected: Re-creating collections...")
+        try:
+            client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
+        if SQLITE_DB_PATH.exists():
+            try:
+                SQLITE_DB_PATH.unlink()
+            except Exception:
+                pass
+
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"}
+    )
+
     with sqlite3.connect(SQLITE_DB_PATH) as conn:
         c = conn.cursor()
         c.execute('''
@@ -397,118 +447,91 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
                 source_version UNINDEXED
             )
         ''')
-
-        c.execute("SELECT id FROM chunks")
-        existing = set(row[0] for row in c.fetchall())
-        new_chunks = [chk for chk in chunks if chk["id"] not in existing]
-        if not new_chunks:
-            print("  [SQLITE] All chunks already exist. Skipping.")
-            return
-
-        print(f"  [SQLITE] Inserting {len(new_chunks)} new child chunks into FTS5...")
-        c.executemany('''
-            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain, age_band, condition_substance, source_doc, source_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', [(
-            chk["id"],
-            chk["text"],
-            chk["metadata"]["parent_id"],
-            chk["metadata"]["parent_text"],
-            chk["metadata"]["source_file"],
-            str(chk["metadata"]["page_number"]),
-            chk["metadata"].get("domain", "GENERAL"),
-            chk["metadata"].get("age_band", "all"),
-            chk["metadata"].get("condition_substance", "general"),
-            chk["metadata"].get("source_doc", chk["metadata"]["source_file"]),
-            chk["metadata"].get("source_version", "1.0.0"),
-        ) for chk in new_chunks])
         conn.commit()
 
-
-def sync_deleted_files(collection: chromadb.Collection, active_filenames: set):
-    """Purges vector and FTS5 entries for files that were deleted from disk."""
-    print("\n[SYNC] Checking for orphan database entries from deleted files...")
-    if SQLITE_DB_PATH.exists():
-        try:
-            with sqlite3.connect(SQLITE_DB_PATH) as conn:
-                c = conn.cursor()
-                c.execute("SELECT DISTINCT source_file FROM chunks")
-                db_sources = set(r[0] for r in c.fetchall())
-                orphan_sources = db_sources - active_filenames
-                if orphan_sources:
-                    print(f"  [SQLITE] Purging {len(orphan_sources)} deleted file sources from FTS5...")
-                    for src in orphan_sources:
-                        c.execute("DELETE FROM chunks WHERE source_file = ?", (src,))
-                    conn.commit()
-                    print(f"  [SQLITE] Cleaned {len(orphan_sources)} deleted file entries ✓")
-        except Exception as e:
-            print(f"  [SQLITE WARN] Sync skipped: {e}")
-
-    try:
+        # Load existing IDs to avoid re-embedding
+        existing_ids = set()
         if collection.count() > 0:
-            metas = collection.get(include=["metadatas"])["metadatas"]
-            chroma_sources = set(m.get("source_file") for m in metas if m.get("source_file"))
-            orphan_chroma = chroma_sources - active_filenames
-            if orphan_chroma:
-                print(f"  [ChromaDB] Purging {len(orphan_chroma)} deleted file sources from vector DB...")
-                for src in orphan_chroma:
-                    collection.delete(where={"source_file": src})
-                print(f"  [ChromaDB] Cleaned {len(orphan_chroma)} deleted file sources ✓")
-    except Exception as e:
-        print(f"  [ChromaDB WARN] Sync skipped: {e}")
+            existing_ids = set(collection.get(include=[])["ids"])
 
+        # 1. Ingest Authoritative Clinical Protocol Chunks
+        print("\n[STEP 1/2] Indexing clinical_protocol.yaml reference chunks...", flush=True)
+        proto_chunks = load_protocol_chunks()
+        new_proto = [chk for chk in proto_chunks if chk["id"] not in existing_ids]
+        if new_proto:
+            texts = [c["text"] for c in new_proto]
+            embeddings = embedding_model.encode(texts, normalize_embeddings=True).tolist()
+            collection.add(
+                ids=[c["id"] for c in new_proto],
+                embeddings=embeddings,
+                documents=texts,
+                metadatas=[c["metadata"] for c in new_proto],
+            )
+            c.executemany('''
+                INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain, age_band, condition_substance, source_doc, source_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', [(
+                chk["id"], chk["text"], chk["metadata"]["parent_id"], chk["metadata"]["parent_text"],
+                chk["metadata"]["source_file"], str(chk["metadata"]["page_number"]),
+                chk["metadata"].get("domain", "GENERAL"), chk["metadata"].get("age_band", "all"),
+                chk["metadata"].get("condition_substance", "general"),
+                chk["metadata"].get("source_doc", "clinical_protocol.yaml"),
+                chk["metadata"].get("source_version", "1.0.0"),
+            ) for chk in new_proto])
+            conn.commit()
+            for chk in new_proto:
+                existing_ids.add(chk["id"])
+            print(f"  ✓ {len(new_proto)} clinical protocol reference chunks indexed.")
+        else:
+            print(f"  ✓ Protocol chunks already up to date ({len(proto_chunks)} chunks).")
 
-def main():
-    print("=" * 65)
-    print("  APOLLO — Advanced RAG Pipeline (Ingestion & Library Sync)")
-    print("=" * 65)
+        # 2. Ingest Document Files
+        txt_files = list(KNOWLEDGE_DIR.rglob("*.txt"))
+        pdf_files = list(KNOWLEDGE_DIR.rglob("*.pdf"))
+        raw_files = sorted(txt_files + pdf_files)
 
-    reset_db = "--reset" in sys.argv
-    chunks = load_and_chunk_files(KNOWLEDGE_DIR)
-    active_filenames = set(c["metadata"]["source_file"] for c in chunks)
-    print(f"\n[LIBRARY] Found {len(active_filenames)} active book/file sources on disk.")
+        seen_bases = set()
+        filtered_files = []
+        for f in raw_files:
+            if f.name.startswith(".~lock") or f.name.startswith("~$") or f.name.endswith("#"):
+                continue
+            base_name = re.sub(r"\s*\(\d+\)", "", f.stem).strip()
+            if base_name in seen_bases:
+                continue
+            seen_bases.add(base_name)
+            filtered_files.append(f)
 
-    print("\n[INIT] Loading SentenceTransformer...")
-    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    
-    print(f"[INIT] Connecting to ChromaDB...")
-    CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
-    
-    if reset_db:
-        print("  [RESET] --reset flag detected: Re-creating ChromaDB collection and SQLite FTS5 table...")
-        try:
-            client.delete_collection(COLLECTION_NAME)
-        except Exception:
-            pass
-        if SQLITE_DB_PATH.exists():
-            try:
-                SQLITE_DB_PATH.unlink()
-            except Exception:
-                pass
+        print(f"\n[STEP 2/2] Ingesting {len(filtered_files)} documents from knowledge repository...", flush=True)
+        total_inserted = 0
+        t0 = time.time()
 
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        metadata={"hnsw:space": "cosine"}
-    )
-    
-    if not reset_db:
-        sync_deleted_files(collection, active_filenames)
+        for idx, file_path in enumerate(filtered_files, start=1):
+            t_file = time.time()
+            rel_path = file_path.relative_to(KNOWLEDGE_DIR)
+            domain = rel_path.parent.name if rel_path.parent.name else "general"
+            print(f"[{idx:02d}/{len(filtered_files):02d}] {file_path.name[:50]:<50} [{domain}]", end=" ... ", flush=True)
+            
+            inserted = process_and_index_file(
+                file_path=file_path,
+                knowledge_dir=KNOWLEDGE_DIR,
+                collection=collection,
+                embedding_model=embedding_model,
+                existing_ids=existing_ids,
+                conn=conn,
+            )
+            total_inserted += inserted
+            el = time.time() - t_file
+            print(f"+{inserted} chunks ({el:.1f}s)", flush=True)
 
-    print("\n[START] Beginning vector ingestion (ChromaDB)...")
-    stats = ingest_documents(collection, embedding_model, chunks)
-    
-    print("\n[START] Beginning keyword ingestion (SQLite FTS5)...")
-    ingest_sqlite(chunks)
-    
-    print("\n" + "=" * 65)
-    print("  INGESTION & SYNC COMPLETE")
-    print("=" * 65)
-    print(f"  Active Files  : {len(active_filenames)}")
-    print(f"  Total Chunks  : {stats['total_processed']}")
-    print(f"  Newly Inserted: {stats['inserted']}")
-    print(f"  DB Size       : {collection.count()}")
-    print("\n  Vector database and keyword search index are 100% synchronized with disk.\n")
+        total_time = time.time() - t0
+        print("\n" + "=" * 65)
+        print("  INGESTION & SYNC COMPLETE")
+        print("=" * 65)
+        print(f"  Total Files Processed: {len(filtered_files)}")
+        print(f"  Newly Indexed Chunks : {total_inserted}")
+        print(f"  Total Index Size     : {collection.count()} vectors")
+        print(f"  Elapsed Time         : {total_time:.1f}s")
+        print("=" * 65)
 
 
 if __name__ == "__main__":

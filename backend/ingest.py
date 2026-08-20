@@ -423,11 +423,6 @@ def main():
             client.delete_collection(COLLECTION_NAME)
         except Exception:
             pass
-        if SQLITE_DB_PATH.exists():
-            try:
-                SQLITE_DB_PATH.unlink()
-            except Exception:
-                pass
 
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
@@ -436,6 +431,10 @@ def main():
 
     with sqlite3.connect(SQLITE_DB_PATH) as conn:
         c = conn.cursor()
+        if reset_db:
+            c.execute("DROP TABLE IF EXISTS chunks")
+            conn.commit()
+
         c.execute('''
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
                 id UNINDEXED,

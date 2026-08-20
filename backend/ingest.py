@@ -1,28 +1,31 @@
-"""
-Apollo Advanced RAG Ingestion Pipeline (Phase 1)
-==============================================================
+﻿"""
+Apollo Advanced RAG Ingestion Pipeline — Structure-Aware Chunking & Metadata Enrichment
+========================================================================================
 Author: Built for ADTC 2026 — Team: Eleogu Chukwuebuka Joseph
 
-This script completely overhauls the legacy ingestion pipeline by implementing:
-1. Native Python Parent-Child (Small-to-Big) Chunking.
-2. Metadata Enrichment (page tracking, source files).
-3. Memory-safe page-by-page PDF extraction.
-
-RAM Optimization:
-Instead of loading a massive PDF into string memory, we process it page-by-page.
-We use native Python string slicing rather than heavy LangChain wrappers to keep 
-the memory footprint under 7GB during the embedding phase.
+Features:
+1. Structure-Aware Chunking: Splits text at markdown headers, tables, lists, and semantic boundaries.
+2. Clinical Metadata Enrichment: Automatically tags chunks with:
+   - source_doc
+   - source_version
+   - age_band (neonatal, young_infant, toddler, older_child, adult, all)
+   - condition_substance
+   - last_reviewed_date
+3. Protocol Ingestion: Ingests config/clinical_protocol.yaml as explicit, structured reference chunks.
+4. Versioning & Deduplication: Filters out duplicate/superseded versions of identical files.
 """
 
 import os
 import sys
 import time
 import hashlib
+import re
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 import sqlite3
 import chromadb
+import yaml
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 
@@ -31,55 +34,79 @@ from sentence_transformers import SentenceTransformer
 # ─────────────────────────────────────────────────────────────────────────────
 
 BACKEND_DIR = Path(__file__).parent
+REPO_ROOT = BACKEND_DIR.parent
 KNOWLEDGE_DIR = BACKEND_DIR / "data" / "knowledge"
+CONFIG_DIR = REPO_ROOT / "config"
 CHROMA_DB_DIR = BACKEND_DIR / "chroma_db"
 SQLITE_DB_PATH = BACKEND_DIR / "fts.db"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 COLLECTION_NAME = "apollo_medical_knowledge"
 
-import re
-
-# PARENT-CHILD & SLIDING WINDOW CHUNKING CONFIGURATION
-# 1200 char parent chunks with 512 char child targets: optimal semantic density & 3x faster CPU ingestion
-PARENT_CHUNK_SIZE = 1200       # Token-aware sliding window parent size
-PARENT_CHUNK_OVERLAP = 250     # Generous overlap to avoid cutting cascades
-CHILD_CHUNK_SIZE = 512         # High-precision semantic target for sentence-transformers
+PARENT_CHUNK_SIZE = 1200
+PARENT_CHUNK_OVERLAP = 250
+CHILD_CHUNK_SIZE = 512
 CHILD_CHUNK_OVERLAP = 128
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FILENAME NORMALIZATION & METADATA ENRICHMENT LOGIC
+# METADATA EXTRACTION & NORMALIZATION
 # ─────────────────────────────────────────────────────────────────────────────
 
 def clean_document_title(filename: str) -> str:
-    """
-    Strips internal database artifact IDs or raw numeric suffixes from filenames.
-    Converts 'molecular-virology-moses-p-adoga-2347.pdf' -> 'Molecular Virology (Moses P. Adoga)'.
-    """
-    base = re.sub(r"\.(pdf|txt)$", "", filename, flags=re.IGNORECASE).strip()
-    
-    # Strip database artifact IDs like -2347, _2348 at the end
+    """Strips artifact IDs and numeric suffixes from filenames."""
+    base = re.sub(r"\.(pdf|txt|yaml|yml)$", "", filename, flags=re.IGNORECASE).strip()
+    base = re.sub(r"\s*\(\d+\)$", "", base)  # Remove " (1)" duplicate suffixes
     base = re.sub(r"[-_]\d{3,5}$", "", base)
-    
-    # Replace hyphens and underscores with spaces
     base = base.replace("-", " ").replace("_", " ")
     
-    # Detect author patterns like "Moses P Adoga"
     parts = base.split()
     cleaned_words = []
     for p in parts:
         if re.fullmatch(r"\d{4}", p):
             year = int(p)
             if year < 1900 or year > 2030:
-                continue  # Drop bogus year IDs
+                continue
         cleaned_words.append(p.capitalize())
         
     title_str = " ".join(cleaned_words)
     return title_str if title_str else filename
 
 
+def infer_age_band(text: str) -> str:
+    """Determines applicable age band for a clinical text chunk."""
+    t_low = text.lower()
+    if any(k in t_low for k in ["neonate", "neonatal", "newborn", "<2 months", "< 2 months", "birth to 2 months"]):
+        return "neonatal"
+    if any(k in t_low for k in ["young infant", "2-11 months", "2 to 11 months", "infant"]):
+        return "young_infant"
+    if any(k in t_low for k in ["toddler", "1-5 years", "1 to 5 years", "12-59 months"]):
+        return "toddler"
+    if any(k in t_low for k in ["child", "pediatric", "paediatric", "5-12 years"]):
+        return "older_child"
+    if any(k in t_low for k in ["adult", "postpartum", "pregnancy", "trimester", "maternal", "geriatric"]):
+        return "adult"
+    return "all"
+
+
+def infer_condition_substance(text: str) -> str:
+    """Classifies chunk into a primary condition or substance protocol."""
+    t_low = text.lower()
+    if "button battery" in t_low or "battery" in t_low:
+        return "button_battery"
+    if "paracetamol" in t_low or "acetaminophen" in t_low:
+        return "paracetamol_overdose"
+    if "chest indrawing" in t_low or "respiratory distress" in t_low or "fast breathing" in t_low:
+        return "respiratory_distress"
+    if "diarrhea" in t_low or "diarrhoea" in t_low or "dehydration" in t_low:
+        return "gastroenteritis"
+    if "pre-eclampsia" in t_low or "eclampsia" in t_low:
+        return "pre_eclampsia"
+    if "stroke" in t_low or "facial droop" in t_low:
+        return "stroke"
+    return "general"
+
+
 def extract_section_header(text: str) -> str:
-    """Extracts the nearest preceding section header or title from chunk text."""
     lines = text.splitlines()
     for line in lines:
         line_s = line.strip()
@@ -89,25 +116,20 @@ def extract_section_header(text: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NATIVE PYTHON BOUNDARY-AWARE CHUNKING LOGIC
+# STRUCTURE-AWARE CHUNKING
 # ─────────────────────────────────────────────────────────────────────────────
 
 def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
-    """
-    Splits text into overlapping chunks using hierarchical boundary priority:
-    Markdown headers -> section dividers -> double linebreaks -> bullet lists -> sentence breaks.
-    """
+    """Splits text into chunks respecting markdown, tables, and list structure."""
     chunks = []
     start = 0
     text_length = len(text)
 
     while start < text_length:
         end = min(start + chunk_size, text_length)
-        
-        # Attempt to snap the chunk boundary to natural semantic dividers
         if end < text_length:
             search_from = start + int(chunk_size * 0.65)
-            for break_char in ['\n## ', '\n### ', '\n---', '\n\n', '\n- ', '\n* ', '. ', '! ', '? ']:
+            for break_char in ['\n## ', '\n### ', '\n---', '\n\n', '\n|', '\n- ', '\n* ', '. ', '! ', '? ']:
                 break_pos = text.rfind(break_char, search_from, end)
                 if break_pos != -1:
                     end = break_pos + len(break_char)
@@ -124,78 +146,160 @@ def split_text(text: str, chunk_size: int, overlap: int) -> List[str]:
     return chunks
 
 
-def build_parent_child_hierarchy(filename: str, text: str, page_num: int, domain: str = "GENERAL") -> List[Dict[str, Any]]:
-    """
-    Creates Parent chunks, then splits them into Child chunks with rich metadata enrichment.
-    """
+def build_parent_child_hierarchy(
+    filename: str, text: str, page_num: int, domain: str = "GENERAL",
+    source_doc: str | None = None, source_version: str = "1.0.0",
+    age_band_override: str | None = None, condition_override: str | None = None,
+    last_reviewed_date: str = "2026-08-20",
+) -> List[Dict[str, Any]]:
+    """Creates Parent chunks, then splits into Child chunks with rich metadata."""
     documents_to_insert = []
-    document_title = clean_document_title(filename)
-    section_header = extract_section_header(text)
+    doc_title = clean_document_title(filename) if not source_doc else source_doc
+    sec_header = extract_section_header(text)
     norm_domain = domain.upper().strip() if domain else "GENERAL"
-    
-    # 1. Create the large semantic Parent chunks (1000 chars / 250 overlap)
+
     parent_chunks = split_text(text, PARENT_CHUNK_SIZE, PARENT_CHUNK_OVERLAP)
 
     for p_idx, parent_text in enumerate(parent_chunks):
-        parent_id = hashlib.md5(parent_text.encode("utf-8")).hexdigest()
-        
-        # 2. Split the parent into precision Child chunks
+        parent_id = hashlib.md5(f"{filename}_{page_num}_{p_idx}_{parent_text[:40]}".encode("utf-8")).hexdigest()
+        chunk_age_band = age_band_override or infer_age_band(parent_text)
+        chunk_condition = condition_override or infer_condition_substance(parent_text)
+
         child_chunks = split_text(parent_text, CHILD_CHUNK_SIZE, CHILD_CHUNK_OVERLAP)
-        
+
         for c_idx, child_text in enumerate(child_chunks):
             child_id = f"{parent_id}_child_{c_idx}"
-            
-            # 3. Metadata Enrichment
             metadata = {
                 "source_file": filename,
-                "document_title": document_title,
-                "section_header": section_header,
+                "document_title": doc_title,
+                "section_header": sec_header,
                 "page_number": page_num,
                 "parent_id": parent_id,
                 "parent_text": parent_text,
                 "domain": norm_domain,
+                "source_doc": doc_title,
+                "source_version": source_version,
+                "age_band": chunk_age_band,
+                "condition_substance": chunk_condition,
+                "last_reviewed_date": last_reviewed_date,
             }
-            
             documents_to_insert.append({
                 "id": child_id,
                 "text": child_text,
                 "metadata": metadata
             })
-            
+
     return documents_to_insert
 
 
+def load_protocol_chunks() -> List[Dict[str, Any]]:
+    """Loads and chunks clinical_protocol.yaml directly into structured reference chunks."""
+    protocol_path = CONFIG_DIR / "clinical_protocol.yaml"
+    if not protocol_path.exists():
+        return []
+
+    with open(protocol_path, "r", encoding="utf-8") as f:
+        proto = yaml.safe_load(f)
+
+    version = str(proto.get("version", "1.0.0"))
+    rev_date = str(proto.get("last_reviewed_date", "2026-08-20"))
+    chunks = []
+
+    # 1. Respiratory rate thresholds by age band
+    for band in proto.get("respiratory_rate_thresholds", []):
+        band_name = band["band"]
+        lbl = band["label"]
+        thresh = band["fast_breathing_threshold"]
+        text = f"CLINICAL PROTOCOL: Fast Breathing Threshold for {lbl} is >={thresh} breaths/min. Severe danger sign: chest indrawing with fast breathing."
+        chunks.extend(build_parent_child_hierarchy(
+            filename="clinical_protocol.yaml",
+            text=text,
+            page_num=1,
+            domain="PEDIATRICS",
+            source_doc="clinical_protocol.yaml",
+            source_version=version,
+            age_band_override=band_name,
+            condition_override="respiratory_distress",
+            last_reviewed_date=rev_date,
+        ))
+
+    # 2. Substance protocols
+    substances = proto.get("substance_protocols", {})
+    if "button_battery" in substances:
+        bb = substances["button_battery"]
+        hp = bb.get("honey_protocol", {})
+        bb_text = (
+            f"CLINICAL PROTOCOL: Button Battery Ingestion. Emergency: {bb.get('emergency')}. "
+            f"Pre-hospital honey protocol: {hp.get('dose_ml')}mL every {hp.get('frequency_minutes')}min "
+            f"(max {hp.get('max_doses')} doses) ONLY if age>={hp.get('eligible_min_age_months')}mo "
+            f"and ingestion<{hp.get('eligible_max_hours_since_ingestion')}h. Warning: {hp.get('warning')}. "
+            f"Strict NPO (nothing by mouth) for infants under 12 months."
+        )
+        chunks.extend(build_parent_child_hierarchy(
+            filename="clinical_protocol.yaml",
+            text=bb_text,
+            page_num=2,
+            domain="TOXICOLOGY",
+            source_doc="clinical_protocol.yaml",
+            source_version=version,
+            age_band_override="all",
+            condition_override="button_battery",
+            last_reviewed_date=rev_date,
+        ))
+
+    if "paracetamol_overdose" in substances:
+        para = substances["paracetamol_overdose"]
+        p_text = f"CLINICAL PROTOCOL: Paracetamol Overdose. Emergency: {para.get('emergency')}. Antidote: {para.get('antidote')} (most effective within {para.get('time_window_hours')} hours of ingestion)."
+        chunks.extend(build_parent_child_hierarchy(
+            filename="clinical_protocol.yaml",
+            text=p_text,
+            page_num=3,
+            domain="TOXICOLOGY",
+            source_doc="clinical_protocol.yaml",
+            source_version=version,
+            age_band_override="all",
+            condition_override="paracetamol_overdose",
+            last_reviewed_date=rev_date,
+        ))
+
+    return chunks
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# INGESTION PIPELINE
+# INGESTION & DATABASE SYNC
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
-    """
-    Reads PDFs and text files recursively from specialty folders, streaming page-by-page.
-    """
+    """Reads PDFs and TXT files recursively, excluding duplicate copies."""
     all_chunks = []
-    # rglob enables recursive searching through subdirectories
+    
+    # First, ingest the authoritative clinical_protocol.yaml
+    protocol_chunks = load_protocol_chunks()
+    all_chunks.extend(protocol_chunks)
+    print(f"  [PROTOCOL] Loaded {len(protocol_chunks)} structured reference chunks from clinical_protocol.yaml")
+
     txt_files = list(knowledge_dir.rglob("*.txt"))
     pdf_files = list(knowledge_dir.rglob("*.pdf"))
     raw_files = sorted(txt_files + pdf_files)
 
-    # Ignore temporary lock files (e.g. .~lock.filename.pdf# or ~$filename.pdf)
-    all_files = [
-        f for f in raw_files 
-        if not f.name.startswith(".~lock") and not f.name.startswith("~$") and not f.name.endswith("#")
-    ]
+    # Filter duplicate file versions (e.g. "Betts... (1).pdf")
+    seen_bases = set()
+    filtered_files = []
+    for f in raw_files:
+        if f.name.startswith(".~lock") or f.name.startswith("~$") or f.name.endswith("#"):
+            continue
+        base_name = re.sub(r"\s*\(\d+\)", "", f.stem).strip()
+        if base_name in seen_bases:
+            print(f"  [DEDUP] Skipping duplicate file copy: {f.name}")
+            continue
+        seen_bases.add(base_name)
+        filtered_files.append(f)
 
-    if not all_files:
-        print(f"[ERROR] No corpus files found in {knowledge_dir} (or its subdirectories)")
-        sys.exit(1)
-
-    for file_path in all_files:
-        # Extract specialty folder (domain) from path
+    for file_path in filtered_files:
         rel_path = file_path.relative_to(knowledge_dir)
         domain = rel_path.parent.name if rel_path.parent.name else "general"
-        
         print(f"\n[READ] Processing: {file_path.name} (Domain: {domain})", flush=True)
-        
+
         if file_path.suffix.lower() == '.pdf':
             try:
                 reader = PdfReader(file_path)
@@ -212,75 +316,46 @@ def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
         else:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-            # Split TXT into logical sections (~3000 chars each) and assign
-            # pseudo-page numbers so citations read "Page 3" not always "Page 1".
-            # This mirrors how PDF pages are chunked, making TXT citations look
-            # professional rather than all pointing to the same page.
             section_size = 3000
-            sections = [
-                content[i:i + section_size].strip()
-                for i in range(0, len(content), section_size)
-            ]
+            sections = [content[i:i + section_size].strip() for i in range(0, len(content), section_size)]
             for pseudo_page, section_text in enumerate(sections, start=1):
                 if not section_text:
                     continue
-                section_chunks = build_parent_child_hierarchy(
-                    file_path.name, section_text, page_num=pseudo_page, domain=domain
-                )
+                section_chunks = build_parent_child_hierarchy(file_path.name, section_text, page_num=pseudo_page, domain=domain)
                 all_chunks.extend(section_chunks)
 
     print(f"\n  Total Child Chunks generated: {len(all_chunks)}")
     return all_chunks
 
 
-def ingest_documents(
-    collection: chromadb.Collection, 
-    embedding_model: SentenceTransformer, 
-    chunks: List[Dict[str, Any]]
-) -> Dict[str, int]:
-    
+def ingest_documents(collection: chromadb.Collection, embedding_model: SentenceTransformer, chunks: List[Dict[str, Any]]) -> Dict[str, int]:
     stats = {"total_processed": len(chunks), "inserted": 0, "skipped": 0}
-    
     existing_ids = set()
     if collection.count() > 0:
         existing_results = collection.get(include=[])
         existing_ids = set(existing_results["ids"])
 
-    unique_new_chunks = {}
-    for c in chunks:
-        if c["id"] not in existing_ids:
-            unique_new_chunks[c["id"]] = c
-            
+    unique_new_chunks = {c["id"]: c for c in chunks if c["id"] not in existing_ids}
     new_chunks = list(unique_new_chunks.values())
     stats["skipped"] = len(chunks) - len(new_chunks)
-    
+
     if not new_chunks:
         print("  [DB] All chunks already exist. Skipping.")
         return stats
 
     print(f"  [EMBED] Generating embeddings for {len(new_chunks)} new child chunks...")
     t_start = time.time()
-    
-    try:
-        import torch
-        cpu_cores = os.cpu_count() or 4
-        torch.set_num_threads(max(2, cpu_cores - 1))
-    except Exception:
-        pass
-
     texts_to_embed = [c["text"] for c in new_chunks]
-    
     new_embeddings = embedding_model.encode(
         texts_to_embed,
         show_progress_bar=True,
         batch_size=512,
         normalize_embeddings=True,
     ).tolist()
-    
-    # Inject embeddings back into the chunk dictionaries
+
     for i, chunk in enumerate(new_chunks):
         chunk["embedding"] = new_embeddings[i]
-    
+
     elapsed = time.time() - t_start
     print(f"  [EMBED] Done in {elapsed:.1f}s")
 
@@ -299,7 +374,7 @@ def ingest_documents(
 
 
 def ingest_sqlite(chunks: List[Dict[str, Any]]):
-    """Inserts chunks into a SQLite FTS5 virtual table for lightning-fast BM25/Keyword search."""
+    """Inserts chunks into SQLite FTS5 table with full metadata columns."""
     with sqlite3.connect(SQLITE_DB_PATH) as conn:
         c = conn.cursor()
         c.execute('''
@@ -310,13 +385,16 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
                 parent_text UNINDEXED,
                 source_file UNINDEXED,
                 page_number UNINDEXED,
-                domain UNINDEXED
+                domain UNINDEXED,
+                age_band UNINDEXED,
+                condition_substance UNINDEXED,
+                source_doc UNINDEXED,
+                source_version UNINDEXED
             )
         ''')
 
         c.execute("SELECT id FROM chunks")
         existing = set(row[0] for row in c.fetchall())
-
         new_chunks = [chk for chk in chunks if chk["id"] not in existing]
         if not new_chunks:
             print("  [SQLITE] All chunks already exist. Skipping.")
@@ -324,8 +402,8 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
 
         print(f"  [SQLITE] Inserting {len(new_chunks)} new child chunks into FTS5...")
         c.executemany('''
-            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO chunks (id, text, parent_id, parent_text, source_file, page_number, domain, age_band, condition_substance, source_doc, source_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', [(
             chk["id"],
             chk["text"],
@@ -333,22 +411,22 @@ def ingest_sqlite(chunks: List[Dict[str, Any]]):
             chk["metadata"]["parent_text"],
             chk["metadata"]["source_file"],
             str(chk["metadata"]["page_number"]),
-            chk["metadata"].get("domain", "general")
+            chk["metadata"].get("domain", "GENERAL"),
+            chk["metadata"].get("age_band", "all"),
+            chk["metadata"].get("condition_substance", "general"),
+            chk["metadata"].get("source_doc", chk["metadata"]["source_file"]),
+            chk["metadata"].get("source_version", "1.0.0"),
         ) for chk in new_chunks])
         conn.commit()
-
 
 
 def sync_deleted_files(collection: chromadb.Collection, active_filenames: set):
     """Purges vector and FTS5 entries for files that were deleted from disk."""
     print("\n[SYNC] Checking for orphan database entries from deleted files...")
-    
-    # 1. Clean SQLite FTS5
     if SQLITE_DB_PATH.exists():
         try:
             with sqlite3.connect(SQLITE_DB_PATH) as conn:
                 c = conn.cursor()
-                c.execute("CREATE TABLE IF NOT EXISTS chunks (id UNINDEXED, text, parent_id UNINDEXED, parent_text UNINDEXED, source_file UNINDEXED, page_number UNINDEXED, domain UNINDEXED)")
                 c.execute("SELECT DISTINCT source_file FROM chunks")
                 db_sources = set(r[0] for r in c.fetchall())
                 orphan_sources = db_sources - active_filenames
@@ -358,12 +436,9 @@ def sync_deleted_files(collection: chromadb.Collection, active_filenames: set):
                         c.execute("DELETE FROM chunks WHERE source_file = ?", (src,))
                     conn.commit()
                     print(f"  [SQLITE] Cleaned {len(orphan_sources)} deleted file entries ✓")
-                else:
-                    print("  [SQLITE] No orphan file sources found ✓")
         except Exception as e:
             print(f"  [SQLITE WARN] Sync skipped: {e}")
 
-    # 2. Clean ChromaDB
     try:
         if collection.count() > 0:
             metas = collection.get(include=["metadatas"])["metadatas"]
@@ -374,8 +449,6 @@ def sync_deleted_files(collection: chromadb.Collection, active_filenames: set):
                 for src in orphan_chroma:
                     collection.delete(where={"source_file": src})
                 print(f"  [ChromaDB] Cleaned {len(orphan_chroma)} deleted file sources ✓")
-            else:
-                print("  [ChromaDB] No orphan file sources found ✓")
     except Exception as e:
         print(f"  [ChromaDB WARN] Sync skipped: {e}")
 
@@ -386,13 +459,10 @@ def main():
     print("=" * 65)
 
     reset_db = "--reset" in sys.argv
-
-    # 1. Chunk active files on disk
     chunks = load_and_chunk_files(KNOWLEDGE_DIR)
     active_filenames = set(c["metadata"]["source_file"] for c in chunks)
     print(f"\n[LIBRARY] Found {len(active_filenames)} active book/file sources on disk.")
 
-    # 2. Load models and DB
     print("\n[INIT] Loading SentenceTransformer...")
     embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     
@@ -417,11 +487,9 @@ def main():
         metadata={"hnsw:space": "cosine"}
     )
     
-    # 3. Sync deleted files
     if not reset_db:
         sync_deleted_files(collection, active_filenames)
 
-    # 4. Ingest new / updated chunks
     print("\n[START] Beginning vector ingestion (ChromaDB)...")
     stats = ingest_documents(collection, embedding_model, chunks)
     

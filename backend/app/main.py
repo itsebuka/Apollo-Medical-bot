@@ -32,6 +32,17 @@ try:
 except ImportError:
     from . import config  # type: ignore
 
+try:
+    from app.pipeline import (  # type: ignore
+        preprocess_query, validate_and_repair, build_system_context_block,
+        ApolloResponse, Escalation,
+    )
+except ImportError:
+    from .pipeline import (
+        preprocess_query, validate_and_repair, build_system_context_block,
+        ApolloResponse, Escalation,
+    )
+
 import sqlite3
 import chromadb
 import io
@@ -721,166 +732,6 @@ def _sanitize_clinical_query(query: str) -> str:
     return clean_q.strip() or query
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DUAL-LAYER DETERMINISTIC CLINICAL SAFETY PIPELINE
-# Layer A: Pre-Processing Input Sanitizer
-# Layer B: Emergency Safety Interceptor
-# Layer C: Post-Processing Response Sanitizer & Schema Validator
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Pre-compiled regex patterns for maximum performance (compiled once at module load)
-_RE_INPUT_PREFIX = re.compile(
-    r"(?i)^(APOLLO\s+TESTING.*?:|TRACK\s+\d+.*?Q\s*[-:]|Q\s*[-:]|FOR\s+TRACK\s+\d+.*?:|QUESTION\s+\d+.*?:)",
-    re.MULTILINE,
-)
-_RE_META_STRIP = re.compile(
-    r"(?i)(FOR\s+TRACK\s+\d+[^\n]*|QUESTION\s+\d+[^\n]*|APOLLO\s+TRIAGE\s+SUMMARY[^\n]*|Generated:\s*\d{1,2}:\d{2}[^\n]*)",
-)
-_RE_SECTION4_END = re.compile(
-    r"(###\s*4\.\s*Likely Causes[^#]*)",
-    re.DOTALL | re.IGNORECASE,
-)
-# All 4 required section headers
-_REQUIRED_SECTIONS = [
-    re.compile(r"###\s*1\.\s*Immediate Priority", re.IGNORECASE),
-    re.compile(r"###\s*2\.\s*Emergency Red Flags", re.IGNORECASE),
-    re.compile(r"###\s*3\.\s*(Immediate Actions|Home Care|Supportive Measures)", re.IGNORECASE),
-    re.compile(r"###\s*4\.\s*Likely Causes", re.IGNORECASE),
-]
-_STUB_SECTIONS = [
-    "### 1. Immediate Priority\n\nThis is a medical emergency. Go to the nearest hospital immediately — do not wait.\n",
-    "### 2. Emergency Red Flags (Seek Immediate Medical Care)\n\n- Seek immediate emergency care.\n",
-    "### 3. Immediate Actions & Supportive Measures\n\nGo to hospital immediately. Do not attempt home treatment for this condition.\n",
-    "### 4. Likely Causes (Differential Overview)\n\nFurther evaluation by a medical professional is required to determine the exact cause.\n",
-]
-
-# High-risk entity triggers — if ANY of these appear in the user's query, the
-# Emergency Safety Interceptor verifies that Section 1 contains urgency language.
-EMERGENCY_TRIGGER_PATTERNS: list[str] = [
-    # Pediatric respiratory
-    "chest indrawing", "chest in-drawing", "chest in drawing", "sucking in ribs",
-    "retractions", "intercostal retractions", "subcostal retractions",
-    "too weak to nurse", "too weak to feed", "too weak to drink", "cannot breathe",
-    "not breathing", "stopped breathing", "turning blue", "cyanosis", "blue lips",
-    # Neurological
-    "face drooping", "facial droop", "arm weakness", "slurred speech", "cannot speak",
-    "worst headache", "thunderclap headache", "sudden headache", "loss of consciousness",
-    "unconscious", "unresponsive", "passed out", "collapsed", "seizure", "convulsion", "fitting",
-    # Cardiac
-    "chest pain", "chest tightness", "chest pressure", "crushing chest", "heart attack",
-    "palpitations",
-    # Obstetric
-    "eclampsia", "pre-eclampsia", "blurred vision pregnant", "vaginal bleeding",
-    "postpartum bleeding", "heavy bleeding after delivery", "placenta",
-    # Toxicology
-    "button battery", "swallowed battery", "ingested battery",
-    "overdose", "swallowed tablets", "took too many", "poisoning", "pesticide", "bleach",
-    # Shock / sepsis
-    "shock", "sepsis", "cold and clammy", "very pale", "rapid pulse",
-]
-
-
-def sanitize_input_query(raw_query: str) -> str:
-    """
-    Layer A — Pre-Processing Input Sanitizer.
-    Strips test/benchmark prefixes from the user query before sending to the LLM.
-    Prevents the LLM from echoing track numbers, question IDs, or test metadata.
-
-    Examples stripped:
-        'FOR TRACK 1, QUESTION 2: My child has fever...' → 'My child has fever...'
-        'Q: My child has fever...' → 'My child has fever...'
-    """
-    cleaned = _RE_INPUT_PREFIX.sub("", raw_query).strip()
-    if cleaned != raw_query:
-        logger.info(f"[GUARDRAIL-A] Input prefix stripped. Original[:60]: {raw_query[:60]!r}")
-    return cleaned or raw_query
-
-
-def check_emergency_safety_intercept(user_query: str, llm_response: str) -> str:
-    """
-    Layer B — Emergency Safety Interceptor.
-    If the user's query contains a high-risk emergency trigger, verify that
-    Section 1 of the LLM response contains urgency language. If not, prepend
-    a mandatory emergency override flag to Section 1.
-
-    This is a deterministic hard-stop that cannot be bypassed by LLM drift.
-    """
-    q_lower = user_query.lower()
-    triggered = any(trigger in q_lower for trigger in EMERGENCY_TRIGGER_PATTERNS)
-    if not triggered:
-        return llm_response
-
-    # Check if Section 1 already contains emergency urgency language
-    urgency_keywords = ["immediate", "emergency", "urgent", "hospital now", "go to hospital",
-                        "call emergency", "seek immediate", "do not wait", "medical emergency"]
-    section1_match = re.search(
-        r"###\s*1\.\s*Immediate Priority(.+?)(?=###|$)", llm_response,
-        re.IGNORECASE | re.DOTALL
-    )
-    if section1_match:
-        section1_text = section1_match.group(1).lower()
-        if any(kw in section1_text for kw in urgency_keywords):
-            return llm_response  # Already has urgency — no override needed
-
-    # Inject emergency override at the top of Section 1
-    override_flag = (
-        "⚠️ **This is a medical emergency. Go to the nearest hospital or call emergency "
-        "services immediately — do not wait.** \n\n"
-    )
-    logger.warning("[GUARDRAIL-B] Emergency trigger detected but Section 1 lacked urgency. Prepending override.")
-    return re.sub(
-        r"(###\s*1\.\s*Immediate Priority\s*\n)",
-        r"\1" + override_flag,
-        llm_response,
-        count=1,
-        flags=re.IGNORECASE,
-    )
-
-
-def sanitize_and_validate_response(user_query: str, raw_response: str) -> str:
-    """
-    Layer C — Post-Processing Response Sanitizer & Schema Validator.
-
-    Steps:
-    1. Metadata Stripping: Remove any echoed test markers, track IDs, or
-       'Apollo Triage Summary / Generated:' headers from the LLM output.
-    2. Schema Validator & Truncator: Verify all 4 sections exist. Prune
-       everything after the final paragraph of Section 4 (removes duplicate
-       'Seek immediate medical care' lists appended after schema close).
-    3. Emergency Safety Interceptor: Force urgency in Section 1 when the
-       user query contained high-risk emergency trigger patterns.
-    """
-    # Step 1 — Strip metadata leakage
-    cleaned = _RE_META_STRIP.sub("", raw_response).strip()
-    if cleaned != raw_response.strip():
-        logger.info("[GUARDRAIL-C1] Metadata strings stripped from LLM response.")
-
-    # Step 2 — Truncate trailing overflow after Section 4
-    section4_match = _RE_SECTION4_END.search(cleaned)
-    if section4_match:
-        # Keep Section 4 content; drop everything after it that isn't part of it
-        # Find where Section 4 ends naturally (next ### header or EOF)
-        s4_start = section4_match.start()
-        remainder = cleaned[s4_start:]
-        # Cut at any additional ### header that appears after Section 4's content
-        overflow_match = re.search(r"\n###\s+(?!4\.)", remainder)
-        if overflow_match:
-            cleaned = cleaned[:s4_start + overflow_match.start()].rstrip()
-            logger.info("[GUARDRAIL-C2] Trailing schema overflow pruned after Section 4.")
-
-    # Step 3 — Schema validator: check all 4 sections present
-    for i, pattern in enumerate(_REQUIRED_SECTIONS):
-        if not pattern.search(cleaned):
-            logger.warning(f"[GUARDRAIL-C3] Section {i+1} missing from LLM response. Injecting stub.")
-            cleaned = cleaned.rstrip() + "\n\n" + _STUB_SECTIONS[i]
-
-    # Step 4 — Emergency Safety Intercept
-    cleaned = check_emergency_safety_intercept(user_query, cleaned)
-
-    return cleaned
-
-
-
 async def retrieve_context(query: str, n_results: int, search_query_override: str | None = None, domain_filter: str | None = None) -> list[dict]:
     """
     Advanced Hybrid Retrieval with Multi-Query Decomposition and Async Cross-Encoder Re-Ranking.
@@ -941,9 +792,19 @@ async def retrieve_context(query: str, n_results: int, search_query_override: st
         return []
 
 
-def build_prompt(messages: list[dict], context_chunks: list[dict], uploaded_context: str | None = None) -> list[dict]:
+def build_prompt(
+    messages: list[dict],
+    context_chunks: list[dict],
+    uploaded_context: str | None = None,
+    system_context_block: str | None = None,
+) -> list[dict]:
     """
-    Construct the Llama 3 Instruct-formatted prompt with RAG context and optional uploaded user document.
+    Construct the Llama 3 Instruct-formatted prompt with RAG context, optional
+    uploaded user document, and injected clinical system context block.
+
+    The system_context_block (from pipeline.build_system_context_block) contains
+    the pre-resolved age-band, emergency flag, and substance protocol so the LLM
+    is given these as explicit variables rather than recalling from training.
     """
     if not messages:
         # Should never happen via the validated endpoint, but guard defensively
@@ -966,6 +827,11 @@ def build_prompt(messages: list[dict], context_chunks: list[dict], uploaded_cont
 
     # ── STRICT MEDICAL ROUTING ──
     user_parts = []
+
+    # Inject the pipeline's system context block first (if provided)
+    if system_context_block:
+        user_parts.append(system_context_block)
+
     if uploaded_context:
         user_parts.append(f"PATIENT/SESSION UPLOADED DOCUMENT:\n\n{uploaded_context}\n\n---")
         
@@ -1146,13 +1012,17 @@ async def chat(request: ChatRequest):
     if not latest_query:
         raise HTTPException(status_code=422, detail="The last message must have non-empty content.")
 
-    # ── Layer A: Pre-Processing Input Sanitizer ──────────────────────────────
-    # Strip test/benchmark prefixes before the query touches RAG or the LLM.
-    sanitized_query = sanitize_input_query(latest_query)
-    if sanitized_query != latest_query:
-        # Patch the messages list so the sanitized query flows through RAG & prompt builder
-        request.messages[-1] = {**request.messages[-1], "content": sanitized_query}
-        latest_query = sanitized_query
+    # ── Layer A: Pre-Processing Pipeline (pipeline.py) ─────────────────────────
+    # preprocess_query() does:
+    #   1. Strip test/benchmark prefixes (regex, never seen by LLM)
+    #   2. Deterministic age extraction (normalized to months)
+    #   3. Red-flag pre-scan against clinical_protocol.yaml
+    #   4. Resolve age-band slice from protocol config
+    structured_query = preprocess_query(latest_query)
+    if structured_query.cleaned_input != latest_query:
+        # Patch messages list so cleaned query flows through RAG & prompt builder
+        request.messages[-1] = {**request.messages[-1], "content": structured_query.cleaned_input}
+        latest_query = structured_query.cleaned_input
 
     logger.info(f"[CHAT] Query received ({len(latest_query)} chars): {latest_query[:80]}...")
 
@@ -1239,8 +1109,16 @@ async def chat(request: ChatRequest):
         dynamic_max_tokens = 2560
     logger.info(f"[BUDGET] Allocated dynamic max_tokens: {dynamic_max_tokens} (complex={is_complex_query})")
 
-    # ── Step 3: Build the prompt ──────────────────────────────────────────────
-    messages = build_prompt(request.messages, context_chunks, uploaded_context=request.uploaded_context)
+    # ── Step 3: Build the prompt with injected clinical context block ─────────
+    # Inject the [SYSTEM CONTEXT] block from the structured query so the LLM
+    # is given the correct age-band threshold, emergency flag, and substance
+    # protocol as explicit variables — not recalled from training.
+    system_context_block = build_system_context_block(structured_query)
+    messages = build_prompt(
+        request.messages, context_chunks,
+        uploaded_context=request.uploaded_context,
+        system_context_block=system_context_block,
+    )
 
     # ── Step 4: Stream response with post-processing guardrails ──────────────
     # Wrap the raw SSE stream with Layer C (post-processing sanitizer + schema validator)
@@ -1270,10 +1148,16 @@ async def chat(request: ChatRequest):
                 yield sse_line
                 return
 
-        # Apply all deterministic guardrails to the fully assembled response
+        # Apply the full deterministic pipeline to the fully assembled response
         raw_full = "".join(full_response_parts)
         if raw_full.strip():
-            scrubbed = sanitize_and_validate_response(latest_query, raw_full)
+            result = validate_and_repair(raw_full, structured_query)
+            scrubbed = result.content  # Works for both ApolloResponse and Escalation
+            if isinstance(result, Escalation):
+                logger.error(
+                    "[CHAT] Pipeline escalated: check=%s reason=%s",
+                    result.failed_check, result.reason
+                )
         else:
             scrubbed = raw_full
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Apollo Medical Triage — Deterministic Clinical Safety Pipeline
 ==============================================================
 Author: Built for ADTC 2026 — Team: Eleogu Chukwuebuka Joseph
@@ -153,12 +153,13 @@ class Escalation:
 # PRE-PROCESSING PIPELINE
 # ---------------------------------------------------------------------------
 
-# Compiled once at module load for performance
-_RE_TEST_PREFIX = re.compile(
-    r"(?i)^\s*(?:APOLLO\s+TESTING.*?:|FOR\s+TRACK\s+\d+.*?:|TRACK\s+\d+.*?Q\s*[-:]"
-    r"|Q\s*[-:]|QUESTION\s+\d+.*?:)\s*",
-    re.MULTILINE,
-)
+# Pre-compiled harness stripping regexes — handles both line-start prefixes and mid-sentence tags
+_RE_HARNESS_PATTERNS = [
+    re.compile(r"(?i)^\s*(?:APOLLO\s+TESTING.*?:|FOR\s+TRACK\s+\d+.*?:|TRACK\s+\d+.*?Q\s*[-:]|Q\s*[-:]|QUESTION\s+\d+.*?:)\s*", re.MULTILINE),
+    re.compile(r"(?i)[\(\[\{]?\s*(?:FOR\s+)?TRACK\s+\d+(?:,\s*QUESTION\s+\d+)?\s*[\)\]\}]?", re.IGNORECASE),
+    re.compile(r"(?i)[\(\[\{]?\s*QUESTION\s+\d+\s*[\)\]\}]?", re.IGNORECASE),
+    re.compile(r"(?i)[\(\[\{]?\s*APOLLO\s+TESTING(?:\s*ROUND\s*\d+)?\s*[\)\]\}]?", re.IGNORECASE),
+]
 
 _RE_AGE_RULES = [
     (re.compile(r"\b(\d+)\s*-?\s*month(?:s)?(?:\s*-?\s*old)?\b", re.IGNORECASE), "months"),
@@ -238,7 +239,7 @@ def preprocess_query(raw_input: str) -> StructuredQuery:
     """
     Layer A — Pre-Processing Pipeline.
 
-    1. Strip test/benchmark artifacts (regex; never reaches the LLM).
+    1. Strip test/benchmark artifacts (both prefix and mid-sentence; never reaches the LLM).
     2. Extract structured fields deterministically: age (months), symptoms,
        substance protocol.
     3. Deterministic red-flag pre-scan against clinical_protocol.yaml.
@@ -250,10 +251,13 @@ def preprocess_query(raw_input: str) -> StructuredQuery:
     """
     protocol = load_clinical_protocol()
 
-    # Step 1 — Strip test artifacts
-    cleaned = _RE_TEST_PREFIX.sub("", raw_input).strip()
+    # Step 1 — Strip test artifacts (prefix + mid-sentence)
+    cleaned = raw_input
+    for pattern in _RE_HARNESS_PATTERNS:
+        cleaned = pattern.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if cleaned != raw_input.strip():
-        logger.info("[PIPELINE-A] Test prefix stripped: %r", raw_input[:80])
+        logger.info("[PIPELINE-A] Test/harness artifacts stripped: %r -> %r", raw_input[:80], cleaned[:80])
 
     # Step 2 — Extract structured fields
     age_months = extract_age_months(cleaned)
@@ -308,6 +312,8 @@ def build_system_context_block(sq: StructuredQuery) -> str:
 
     if sq.age_months is not None:
         lines.append(f"patient_age_months: {sq.age_months}")
+    else:
+        lines.append("patient_age_months: null (age unspecified — do NOT guess or interpolate age band; ask caregiver for age or default to seek immediate evaluation)")
 
     if sq.age_band:
         t = sq.age_band.get("fast_breathing_threshold", "?")

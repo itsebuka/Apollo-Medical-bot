@@ -22,12 +22,12 @@ import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# Ensure offline operation and single-threaded OpenBLAS memory stability on Windows
+# Ensure offline operation and 8-thread parallelism for CPU embedding acceleration
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "8"
+os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["MKL_NUM_THREADS"] = "8"
 
 import time
 import hashlib
@@ -36,6 +36,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 import sqlite3
+import torch
+torch.set_num_threads(8)
+
 import chromadb
 import yaml
 from pypdf import PdfReader
@@ -347,19 +350,22 @@ def process_and_index_file(
             chunks.extend(section_chunks)
 
     if not chunks:
+        print("(0 chunks extracted)", flush=True)
         return 0
 
     # Filter out already existing chunks
     new_chunks = [c for c in chunks if c["id"] not in existing_ids]
     if not new_chunks:
-        print(f"    ✓ All {len(chunks)} chunks already up to date.", flush=True)
+        print(f"({len(chunks)} chunks, all up to date)", flush=True)
         return 0
 
-    # Embed new chunks in batches
+    print(f"({len(new_chunks)} chunks, embedding...)", end=" ", flush=True)
+
+    # Embed new chunks in batches with 8-thread CPU parallelism
     texts_to_embed = [c["text"] for c in new_chunks]
     new_embeddings = embedding_model.encode(
         texts_to_embed,
-        batch_size=256,
+        batch_size=512,
         show_progress_bar=False,
         normalize_embeddings=True,
     ).tolist()

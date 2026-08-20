@@ -1,4 +1,4 @@
-﻿"""
+"""
 Apollo Advanced RAG Ingestion Pipeline — Structure-Aware Chunking & Metadata Enrichment
 ========================================================================================
 Author: Built for ADTC 2026 — Team: Eleogu Chukwuebuka Joseph
@@ -17,6 +17,11 @@ Features:
 
 import os
 import sys
+
+# Ensure offline operation using local huggingface model cache
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
 import time
 import hashlib
 import re

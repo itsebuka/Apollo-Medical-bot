@@ -133,7 +133,7 @@ async def evaluate_single_query(item: dict, generate_llm: bool = True) -> dict:
 
 async def main():
     await init_models()
-    with open(EVAL_SET_PATH, "r", encoding="utf-8") as f:
+    with open(EVAL_SET_PATH, "r", encoding="utf-8-sig") as f:
         items = [json.loads(line) for line in f if line.strip()]
 
     print(f"Loaded {len(items)} evaluation queries from {EVAL_SET_PATH.name}")

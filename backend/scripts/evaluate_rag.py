@@ -1,4 +1,4 @@
-﻿"""
+"""
 Apollo RAG Pipeline — Evaluation & Latency Benchmarking Harness
 Measures Precision@k, Recall@k, Grounding Pass Rate, and Stage-by-Stage Latency
 across Safety-Critical, Near-Boundary, Distractor, and Common-Case subsets.
@@ -6,6 +6,15 @@ across Safety-Critical, Near-Boundary, Distractor, and Common-Case subsets.
 import sys, os, time, json, asyncio
 from pathlib import Path
 import numpy as np
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "8"
+os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["MKL_NUM_THREADS"] = "8"
 
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
@@ -91,7 +100,8 @@ async def evaluate_single_query(item: dict, generate_llm: bool = True) -> dict:
 
         # Stage 5: Post-processing Validation
         t0_post = time.perf_counter()
-        val_res = validate_and_repair(llm_output, sq)
+        chunk_ids = [c.get("id", c.get("source", "chk")) for c in chunks]
+        val_res = validate_and_repair(llm_output, sq, retrieved_chunks=chunks, retrieved_chunk_ids=chunk_ids)
         t_post = (time.perf_counter() - t0_post) * 1000
         val_status = type(val_res).__name__
         grounding_passed = isinstance(val_res, ApolloResponse) or (isinstance(val_res, Escalation) and item.get("red_flag", False))

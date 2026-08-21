@@ -33,7 +33,12 @@ RESULTS_OUTPUT_PATH = ROOT / "backend" / "scripts" / "rag_eval_results.json"
 async def init_models():
     if config.llm_instance is None:
         print("[1/4] Loading GGUF LLM...")
-        config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **config.LLM_CONFIG)
+        try:
+            config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **config.LLM_CONFIG)
+        except Exception as e:
+            print(f"Fallback LLM loading ({e})...")
+            fallback_cfg = {**config.LLM_CONFIG, "flash_attn": False, "use_mmap": True}
+            config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **fallback_cfg)
     if config.embedding_model_instance is None:
         print("[2/4] Loading Embedding Model...")
         config.embedding_model_instance = SentenceTransformer(config.EMBEDDING_MODEL_NAME)

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Apollo Index Integrity & Version Staleness Checker
 ===================================================
 Runs during CI / deployment to verify:
@@ -12,6 +12,9 @@ import sqlite3
 from pathlib import Path
 import chromadb
 import yaml
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = ROOT / "config" / "clinical_protocol.yaml"

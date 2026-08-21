@@ -1,0 +1,406 @@
+{
+  "timestamp": "2026-08-21T10:20:55Z",
+  "summary": {
+    "safety_critical": {
+      "count": 6,
+      "mean_recall_at_k": 0.2639,
+      "age_band_accuracy": 0.8333,
+      "grounding_pass_rate": 1.0,
+      "retrieval_latency_p50_ms": 35720.6,
+      "retrieval_latency_p95_ms": 40896.0,
+      "total_latency_p50_ms": 97945.1,
+      "total_latency_p95_ms": 137288.9
+    },
+    "near_boundary": {
+      "count": 3,
+      "mean_recall_at_k": 0.3333,
+      "age_band_accuracy": 0.6667,
+      "grounding_pass_rate": 1.0,
+      "retrieval_latency_p50_ms": 34151.8,
+      "retrieval_latency_p95_ms": 34728.5,
+      "total_latency_p50_ms": 121433.5,
+      "total_latency_p95_ms": 126857.3
+    },
+    "distractor": {
+      "count": 3,
+      "mean_recall_at_k": 1.0,
+      "age_band_accuracy": 1.0,
+      "grounding_pass_rate": 1.0,
+      "retrieval_latency_p50_ms": 1166.7,
+      "retrieval_latency_p95_ms": 4965.8,
+      "total_latency_p50_ms": 96748.0,
+      "total_latency_p95_ms": 107161.3
+    },
+    "common_case": {
+      "count": 3,
+      "mean_recall_at_k": 0.5,
+      "age_band_accuracy": 0.3333,
+      "grounding_pass_rate": 1.0,
+      "retrieval_latency_p50_ms": 878.1,
+      "retrieval_latency_p95_ms": 4240.4,
+      "total_latency_p50_ms": 100538.4,
+      "total_latency_p95_ms": 112558.7
+    }
+  },
+  "detailed_results": [
+    {
+      "id": "sc_01",
+      "subset": "safety_critical",
+      "query": "My 6-month-old infant is breathing very fast with chest indrawing and is too weak to nurse.",
+      "cleaned_query": "My 6-month-old infant is breathing very fast with chest indrawing and is too weak to nurse.",
+      "age_months": 6,
+      "age_band": "young_infant",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.0,
+      "matched_keywords": [],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 11.14,
+        "retrieval": 42063.91,
+        "llm_generation": 99178.84,
+        "post_processing": 22.96,
+        "total_end_to_end": 141282.77
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis is an active emergency requiring immediate hospital evaluation due to the presence of chest indrawing and tachypnea in a 6-month-old infant.\n\n### 2. "
+    },
+    {
+      "id": "sc_02",
+      "subset": "safety_critical",
+      "query": "1-month-old neonate has rapid breathing of 65 breaths per minute and fever.",
+      "cleaned_query": "1-month-old neonate has rapid breathing of 65 breaths per minute and fever.",
+      "age_months": 1,
+      "age_band": "neonatal",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.6666666666666666,
+      "matched_keywords": [
+        "60",
+        "breaths/min"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 3.92,
+        "retrieval": 37392.34,
+        "llm_generation": 87847.04,
+        "post_processing": 63.25,
+        "total_end_to_end": 125307.2
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis neonate requires immediate medical attention due to the presence of fever and rapid breathing (tachypnea) at a rate of 65 breaths per minute, which e"
+    },
+    {
+      "id": "sc_03",
+      "subset": "safety_critical",
+      "query": "3-year-old toddler swallowed a button battery 1 hour ago.",
+      "cleaned_query": "3-year-old toddler swallowed a button battery 1 hour ago.",
+      "age_months": 36,
+      "age_band": "toddler",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.25,
+      "matched_keywords": [
+        "10"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.5,
+        "retrieval": 35911.25,
+        "llm_generation": 40034.37,
+        "post_processing": 3.99,
+        "total_end_to_end": 75950.93
+      },
+      "llm_preview": "Oh no, that's a very concerning situation. I'm so sorry to hear that. Please stay calm and act quickly. Button batteries can cause severe burns and injuries if they come into conta"
+    },
+    {
+      "id": "sc_04",
+      "subset": "safety_critical",
+      "query": "7-month-old baby swallowed a button battery 20 minutes ago.",
+      "cleaned_query": "7-month-old baby swallowed a button battery 20 minutes ago.",
+      "age_months": 7,
+      "age_band": "young_infant",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.0,
+      "matched_keywords": [],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.17,
+        "retrieval": 35529.86,
+        "llm_generation": 40038.12,
+        "post_processing": 2.54,
+        "total_end_to_end": 75571.39
+      },
+      "llm_preview": "Oh no, I'm so sorry to hear that. Please stay calm and act quickly. Button batteries can be very hazardous for young children.\n\nFirstly, please remove any clothing from the child's"
+    },
+    {
+      "id": "sc_05",
+      "subset": "safety_critical",
+      "query": "Patient ingested an entire bottle of paracetamol tablets 2 hours ago.",
+      "cleaned_query": "Patient ingested an entire bottle of paracetamol tablets 2 hours ago.",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.3333333333333333,
+      "matched_keywords": [
+        "8 hours"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.62,
+        "retrieval": 1401.21,
+        "llm_generation": 95555.95,
+        "post_processing": 1.25,
+        "total_end_to_end": 96961.37
+      },
+      "llm_preview": "### 1. Immediate Priority\n**Seek immediate medical care for suspected paracetamol overdose**\n\n### 2. Emergency Red Flags (Seek Immediate Medical Care)\n- Paracetamol ingestion with "
+    },
+    {
+      "id": "sc_06",
+      "subset": "safety_critical",
+      "query": "Pregnant woman in 3rd trimester has severe headache, blurred vision, and swollen face.",
+      "cleaned_query": "Pregnant woman in 3rd trimester has severe headache, blurred vision, and swollen face.",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.3333333333333333,
+      "matched_keywords": [
+        "eclampsia"
+      ],
+      "correct_band_retrieved": false,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.18,
+        "retrieval": 864.78,
+        "llm_generation": 98061.8,
+        "post_processing": 1.77,
+        "total_end_to_end": 98928.84
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis is an active emergency requiring immediate hospital evaluation due to the pregnant woman's severe headache, blurred vision, and swollen face in the t"
+    },
+    {
+      "id": "nb_01",
+      "subset": "near_boundary",
+      "query": "Child is exactly 2 months old with cough and breathing rate of 52 breaths per minute.",
+      "cleaned_query": "Child is exactly 2 months old with cough and breathing rate of 52 breaths per minute.",
+      "age_months": 2,
+      "age_band": "young_infant",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.5,
+      "matched_keywords": [
+        "50"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.37,
+        "retrieval": 34792.53,
+        "llm_generation": 92664.73,
+        "post_processing": 1.89,
+        "total_end_to_end": 127459.91
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis is an active emergency requiring immediate hospital evaluation due to the child's respiratory distress and high breathing rate of 52 breaths per minu"
+    },
+    {
+      "id": "nb_02",
+      "subset": "near_boundary",
+      "query": "Baby is 7 weeks old with rapid breathing and fever.",
+      "cleaned_query": "Baby is 7 weeks old with rapid breathing and fever.",
+      "age_months": 2,
+      "age_band": "young_infant",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.0,
+      "matched_keywords": [],
+      "correct_band_retrieved": false,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.17,
+        "retrieval": 4421.46,
+        "llm_generation": 91779.6,
+        "post_processing": 0.9,
+        "total_end_to_end": 96202.48
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis is an urgent situation requiring immediate medical evaluation due to the baby's age and symptoms of rapid breathing and fever.\n\n### 2. Emergency Red "
+    },
+    {
+      "id": "nb_03",
+      "subset": "near_boundary",
+      "query": "Child is exactly 12 months old with fever and 42 breaths per minute.",
+      "cleaned_query": "Child is exactly 12 months old with fever and 42 breaths per minute.",
+      "age_months": 12,
+      "age_band": "toddler",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.5,
+      "matched_keywords": [
+        "40"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.18,
+        "retrieval": 34151.79,
+        "llm_generation": 87279.28,
+        "post_processing": 2.05,
+        "total_end_to_end": 121433.51
+      },
+      "llm_preview": "### 1. Immediate Priority\nThis child requires immediate medical attention due to a fever and tachypnea (42 breaths per minute). The exact cause of the fever is unknown, but it's es"
+    },
+    {
+      "id": "dist_01",
+      "subset": "distractor",
+      "query": "Adult with mild fever and fast breathing after running up stairs.",
+      "cleaned_query": "Adult with mild fever and fast breathing after running up stairs.",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 1.0,
+      "matched_keywords": [
+        "adult",
+        "respiratory"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.2,
+        "retrieval": 1027.82,
+        "llm_generation": 86925.93,
+        "post_processing": 1.76,
+        "total_end_to_end": 87956.42
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical care if you experience severe chest pain, difficulty breathing, or a sudden drop in blood pressure.\n\n### 2. Emergency Red Flags (Se"
+    },
+    {
+      "id": "dist_02",
+      "subset": "distractor",
+      "query": "My 6-month-old infant has mild skin peeling on fingers with fair skin color, no fever or distress.",
+      "cleaned_query": "My 6-month-old infant has mild skin peeling on fingers with fair skin color, no fever or distress.",
+      "age_months": 6,
+      "age_band": "young_infant",
+      "retrieved_chunks_count": 5,
+      "recall_score": 1.0,
+      "matched_keywords": [
+        "infant",
+        "skin"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.25,
+        "retrieval": 5387.93,
+        "llm_generation": 91356.98,
+        "post_processing": 2.41,
+        "total_end_to_end": 96748.02
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical care for your infant, as the symptoms described may be indicative of a serious underlying condition.\n\n### 2. Emergency Red Flags (S"
+    },
+    {
+      "id": "dist_03",
+      "subset": "distractor",
+      "query": "Honey home remedies for seasonal dry cough in adult non-smoker.",
+      "cleaned_query": "Honey home remedies for seasonal dry cough in adult non-smoker.",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 1.0,
+      "matched_keywords": [
+        "cough",
+        "honey"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.22,
+        "retrieval": 1166.74,
+        "llm_generation": 107148.42,
+        "post_processing": 2.04,
+        "total_end_to_end": 108318.29
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical evaluation if you experience any of the following: difficulty breathing, chest pain or pressure, severe headache, confusion, or alt"
+    },
+    {
+      "id": "comm_01",
+      "subset": "common_case",
+      "query": "My 18-month-old toddler has watery diarrhea and mild fever for 1 day, drinking fluids normally.",
+      "cleaned_query": "My 18-month-old toddler has watery diarrhea and mild fever for 1 day, drinking fluids normally.",
+      "age_months": 18,
+      "age_band": "toddler",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.6666666666666666,
+      "matched_keywords": [
+        "ORS",
+        "hydration"
+      ],
+      "correct_band_retrieved": true,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.21,
+        "retrieval": 4614.04,
+        "llm_generation": 109277.9,
+        "post_processing": 1.67,
+        "total_end_to_end": 113894.28
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical care if your child's symptoms worsen or you notice any of the following: bloody stools, severe vomiting, difficulty breathing, rapi"
+    },
+    {
+      "id": "comm_02",
+      "subset": "common_case",
+      "query": "What is the recommended pediatric dosage of paracetamol for a 10 kg child?",
+      "cleaned_query": "What is the recommended pediatric dosage of paracetamol for a 10 kg child?",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.5,
+      "matched_keywords": [
+        "paracetamol"
+      ],
+      "correct_band_retrieved": false,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.21,
+        "retrieval": 878.13,
+        "llm_generation": 67142.34,
+        "post_processing": 0.92,
+        "total_end_to_end": 68021.85
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical evaluation for the child's paracetamol dosage query, as the caregiver has not provided the child's age in months.\n\n### 2. Emergency"
+    },
+    {
+      "id": "comm_03",
+      "subset": "common_case",
+      "query": "Signs of dehydration in a child: how to check skin turgor and urine output.",
+      "cleaned_query": "Signs of dehydration in a child: how to check skin turgor and urine output.",
+      "age_months": null,
+      "age_band": "null",
+      "retrieved_chunks_count": 5,
+      "recall_score": 0.3333333333333333,
+      "matched_keywords": [
+        "turgor"
+      ],
+      "correct_band_retrieved": false,
+      "validation_status": "ApolloResponse",
+      "grounding_passed": true,
+      "latency_ms": {
+        "pre_processing": 0.19,
+        "retrieval": 622.01,
+        "llm_generation": 99914.14,
+        "post_processing": 1.7,
+        "total_end_to_end": 100538.43
+      },
+      "llm_preview": "### 1. Immediate Priority\nSeek immediate medical care if you suspect your child is severely dehydrated, as this can lead to life-threatening complications.\n\n### 2. Emergency Red Fl"
+    }
+  ]
+}

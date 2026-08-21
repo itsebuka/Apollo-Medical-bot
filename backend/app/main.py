@@ -693,6 +693,14 @@ def _sync_candidate_retrieval(
     return tuple(merged_contexts[key] for key in sorted_keys[:search_k])
 
 
+def _sanitize_clinical_query(q: str) -> str:
+    """Strips preamble headers, test track labels, and meta prompts before retrieval."""
+    if not q:
+        return ""
+    q_clean = re.sub(r'(?i)^\s*(?:FOR\s+TRACK\s+\d+[,:]?\s*(?:QUESTION\s+\d+[:\s]*)?|QUESTION\s+\d+[:\s]*|Q[:\s]+)', '', q).strip()
+    return q_clean if q_clean else q
+
+
 async def retrieve_context(
     query: str,
     n_results: int,

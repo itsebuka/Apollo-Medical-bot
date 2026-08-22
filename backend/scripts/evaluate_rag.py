@@ -98,7 +98,7 @@ async def evaluate_single_query(item: dict, generate_llm: bool = True) -> dict:
         t0_llm = time.perf_counter()
         loop = asyncio.get_running_loop()
         def _gen():
-            res = config.llm_instance.create_chat_completion(messages=messages, stream=False, **{**config.GENERATION_CONFIG, "max_tokens": 1024})
+            res = config.llm_instance.create_chat_completion(messages=messages, stream=False, **{**config.GENERATION_CONFIG, "max_tokens": 420})
             return res["choices"][0]["message"]["content"]
         llm_output = await loop.run_in_executor(None, _gen)
         t_llm = (time.perf_counter() - t0_llm) * 1000

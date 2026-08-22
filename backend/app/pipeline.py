@@ -715,3 +715,15 @@ def validate_and_repair(
         regeneration_count=regen_count,
         retrieved_chunk_ids=chunk_ids,
     )
+
+
+def clean_research_output(text: str) -> str:
+    """Cleans test-harness metadata leakage and meta-prompt artifacts from Deep Research responses
+    without forcing the 4-part clinical emergency triage schema."""
+    if not text:
+        return ""
+    cleaned = text
+    for pat in _RE_HARNESS_PATTERNS:
+        cleaned = pat.sub("", cleaned)
+    cleaned = re.sub(r"(?i)^\s*(?:FOR\s+TRACK\s+\d+[,:]?\s*(?:QUESTION\s+\d+[:\s]*)?|QUESTION\s+\d+[:\s]*|Q[:\s]+)", "", cleaned)
+    return cleaned.strip()

@@ -571,9 +571,9 @@ def _sync_candidate_retrieval(
     search_text = search_query_override if search_query_override else query
     expanded_query = expand_query(search_text)
 
-    # Initial retrieval pool expansion: initial_k = 12 candidates prior to Cross-Encoder re-ranking
+    # Initial retrieval pool calibration: 8-10 candidates prior to Cross-Encoder re-ranking
     total_docs = config.chroma_collection_instance.count()
-    search_k = min(max(12, n_results * 4), max(1, total_docs))
+    search_k = min(max(8, n_results * 2), max(1, total_docs))
 
     # ── Build Server-Side Metadata Filters ──────────────────────────────────
     # Enforces retrieval-time filtering (Part 1.2): only chunks matching patient's
@@ -685,19 +685,23 @@ def _sync_candidate_retrieval(
     except Exception as e:
         logger.error(f"[FTS5] Sparse search failed: {e}")
 
-    # ── 3. RECIPROCAL RANK FUSION (RRF) ──────────────────────────────────────
+    # ── 3. RECIPROCAL RANK FUSION (RRF) WITH PROTOCOL BOOSTING ────────────────
     rrf_scores: dict[str, float] = {}
     merged_contexts: dict[str, dict] = {}
     k = 60
 
     for rank, ctx in enumerate(chroma_parents):
         key = ctx["text"]
-        rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+        is_protocol = "clinical_protocol.yaml" in ctx.get("source", "")
+        weight = 2.5 if is_protocol else 1.0
+        rrf_scores[key] = rrf_scores.get(key, 0.0) + weight / (k + rank + 1)
         merged_contexts[key] = ctx
 
     for rank, ctx in enumerate(sqlite_parents):
         key = ctx["text"]
-        rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+        is_protocol = "clinical_protocol.yaml" in ctx.get("source", "")
+        weight = 2.5 if is_protocol else 1.0
+        rrf_scores[key] = rrf_scores.get(key, 0.0) + weight / (k + rank + 1)
         if key not in merged_contexts:
             merged_contexts[key] = ctx
 
@@ -721,13 +725,29 @@ async def retrieve_context(
     structured_query: Any = None,
 ) -> list[dict]:
     """
-    Advanced Hybrid Retrieval with Metadata Pre-Filtering and Calibrated Cross-Encoder Re-Ranking.
+    Advanced Hybrid Retrieval with Clinical Entity Query Formulation, Protocol Score Boosting,
+    and Calibrated Cross-Encoder Re-Ranking.
     """
     try:
         query = _sanitize_clinical_query(query)
         age_band_filter = None
         if structured_query and hasattr(structured_query, "age_band") and structured_query.age_band:
             age_band_filter = structured_query.age_band.get("band")
+
+        # Formulate clinical entity search query to boost recall on patient presentation terms
+        if not search_query_override and structured_query:
+            entities = []
+            if getattr(structured_query, "matched_red_flags", None):
+                entities.extend(structured_query.matched_red_flags)
+            if getattr(structured_query, "symptoms", None):
+                entities.extend(structured_query.symptoms)
+            if getattr(structured_query, "substance_protocol", None) and isinstance(structured_query.substance_protocol, dict):
+                entities.append(structured_query.substance_protocol.get("substance", ""))
+            if getattr(structured_query, "age_band", None) and isinstance(structured_query.age_band, dict):
+                entities.append(structured_query.age_band.get("label", ""))
+            if entities:
+                clean_entities = [e for e in entities if e]
+                search_query_override = f"{query} {' '.join(clean_entities)}"
 
         if search_query_override:
             candidates = list(_sync_candidate_retrieval(query, n_results, search_query_override, domain_filter, age_band_filter))
@@ -1088,8 +1108,12 @@ async def chat(request: ChatRequest):
     ])
 
     q_len = len(latest_query)
-    if is_complex_query:
-        # Complex mechanism/comparison questions get 2560 max tokens so reference lists are never truncated
+    if request.mode == "triage":
+        # Triage mode outputs only the concise 4-part schema (~200-250 words).
+        # Capping at 420 tokens provides 3x-4x faster responses on CPU.
+        dynamic_max_tokens = 420
+    elif is_complex_query:
+        # Deep research complex questions get 2560 tokens
         dynamic_max_tokens = 2560
     elif q_len < 80 and top_sim > 0.75:
         dynamic_max_tokens = 1024
@@ -1097,7 +1121,7 @@ async def chat(request: ChatRequest):
         dynamic_max_tokens = 1536
     else:
         dynamic_max_tokens = 2560
-    logger.info(f"[BUDGET] Allocated dynamic max_tokens: {dynamic_max_tokens} (complex={is_complex_query})")
+    logger.info(f"[BUDGET] Allocated dynamic max_tokens: {dynamic_max_tokens} (mode={request.mode}, complex={is_complex_query})")
 
     # ── Step 3: Build the prompt with injected clinical context block ─────────
     # Inject the [SYSTEM CONTEXT] block from the structured query so the LLM

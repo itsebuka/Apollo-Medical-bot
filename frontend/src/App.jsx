@@ -504,6 +504,7 @@ export default function App() {
           // use_hyde: Deep Research mode enables HyDE expansion for better
           // retrieval on complex queries. Triage Mode skips it for speed.
           use_hyde: mode === 'research',
+          mode: mode === 'research' ? 'research' : 'triage',
         }),
         signal: abortControllerRef.current.signal,
       })

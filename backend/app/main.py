@@ -25,6 +25,7 @@ import functools
 import copy
 from contextlib import asynccontextmanager
 import contextlib
+import sys
 from typing import AsyncGenerator
 
 try:
@@ -35,12 +36,12 @@ except ImportError:
 try:
     from app.pipeline import (  # type: ignore
         preprocess_query, validate_and_repair, build_system_context_block,
-        ApolloResponse, Escalation,
+        ApolloResponse, Escalation, clean_research_output,
     )
 except ImportError:
     from .pipeline import (
         preprocess_query, validate_and_repair, build_system_context_block,
-        ApolloResponse, Escalation,
+        ApolloResponse, Escalation, clean_research_output,
     )
 
 import sqlite3
@@ -58,15 +59,22 @@ except ImportError:
     PdfReader = None  # Will raise a clear error at upload time if missing
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LOGGING SETUP
-# Structured logging is critical for debugging a black-box offline system.
+# LOGGING & STRUCTURED METRICS CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
-)
+
 logger = logging.getLogger("apollo")
+logger.setLevel(logging.INFO)
+
+# Prevent duplicate handlers on hot-reload
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+        datefmt="%H:%M:%S"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 @contextlib.contextmanager
 def time_profiler(label: str):
@@ -117,6 +125,10 @@ class ChatRequest(BaseModel):
             "retrieval quality is low. Enabled for Deep Research mode; disabled for Triage mode "
             "to save the 10-15s HyDE inference cost."
         )
+    )
+    mode: str = Field(
+        default="triage",
+        description="Mode: 'triage' (clinical emergency & symptom triage) or 'research' (deep medical research & mechanistic analysis)"
     )
 
 class TitleRequest(BaseModel):
@@ -771,8 +783,6 @@ async def retrieve_context(
     except Exception as e:
         logger.error(f"[retrieve_context] Unhandled error: {e} — returning empty context")
         return []
-        logger.error(f"[retrieve_context] Unhandled error: {e} — returning empty context")
-        return []
 
 
 def build_prompt(
@@ -780,14 +790,11 @@ def build_prompt(
     context_chunks: list[dict],
     uploaded_context: str | None = None,
     system_context_block: str | None = None,
+    mode: str = "triage",
 ) -> list[dict]:
     """
-    Construct the Llama 3 Instruct-formatted prompt with RAG context, optional
-    uploaded user document, and injected clinical system context block.
-
-    The system_context_block (from pipeline.build_system_context_block) contains
-    the pre-resolved age-band, emergency flag, and substance protocol so the LLM
-    is given these as explicit variables rather than recalling from training.
+    Build the final message list sent to llama_cpp.create_chat_completion().
+    Supports both Clinical Triage mode (strict 4-part schema) and Deep Research mode (in-depth scientific analysis).
     """
     if not messages:
         # Should never happen via the validated endpoint, but guard defensively
@@ -1096,11 +1103,12 @@ async def chat(request: ChatRequest):
     # Inject the [SYSTEM CONTEXT] block from the structured query so the LLM
     # is given the correct age-band threshold, emergency flag, and substance
     # protocol as explicit variables — not recalled from training.
-    system_context_block = build_system_context_block(structured_query)
+    system_context_block = build_system_context_block(structured_query) if request.mode != "research" else None
     messages = build_prompt(
         request.messages, context_chunks,
         uploaded_context=request.uploaded_context,
         system_context_block=system_context_block,
+        mode=request.mode,
     )
 
     # ── Step 4: Stream response with post-processing guardrails ──────────────
@@ -1135,13 +1143,16 @@ async def chat(request: ChatRequest):
         raw_full = "".join(full_response_parts)
         if raw_full.strip():
             chunk_ids = [c.get("id", c.get("source", "chk")) for c in context_chunks]
-            result = validate_and_repair(raw_full, structured_query, retrieved_chunks=context_chunks, retrieved_chunk_ids=chunk_ids)
-            scrubbed = result.content  # Works for both ApolloResponse and Escalation
-            if isinstance(result, Escalation):
-                logger.error(
-                    "[CHAT] Pipeline escalated: check=%s reason=%s",
-                    result.failed_check, result.reason
-                )
+            if request.mode == "research":
+                scrubbed = clean_research_output(raw_full)
+            else:
+                result = validate_and_repair(raw_full, structured_query, retrieved_chunks=context_chunks, retrieved_chunk_ids=chunk_ids)
+                scrubbed = result.content  # Works for both ApolloResponse and Escalation
+                if isinstance(result, Escalation):
+                    logger.error(
+                        "[CHAT] Pipeline escalated: check=%s reason=%s",
+                        result.failed_check, result.reason
+                    )
         else:
             scrubbed = raw_full
 

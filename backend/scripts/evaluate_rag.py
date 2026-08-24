@@ -5,6 +5,7 @@ across Safety-Critical, Near-Boundary, Distractor, and Common-Case subsets.
 """
 import sys, os, time, json, asyncio
 from pathlib import Path
+from typing import Any
 import numpy as np
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -37,8 +38,8 @@ async def init_models():
             config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **config.LLM_CONFIG)
         except Exception as e:
             print(f"Fallback LLM loading ({e})...")
-            fallback_cfg = {**config.LLM_CONFIG, "flash_attn": False, "use_mmap": True}
-            config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **fallback_cfg)
+            fallback_cfg: dict[str, Any] = {**config.LLM_CONFIG, "flash_attn": False, "use_mmap": True}
+            config.llm_instance = Llama(model_path=str(config.MODEL_PATH), **fallback_cfg)  # type: ignore
     if config.embedding_model_instance is None:
         print("[2/4] Loading Embedding Model...")
         config.embedding_model_instance = SentenceTransformer(config.EMBEDDING_MODEL_NAME)

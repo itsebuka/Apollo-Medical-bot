@@ -20,7 +20,7 @@ import sys
 
 # Configure UTF-8 output encoding for Windows terminals
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    getattr(sys.stdout, "reconfigure")(encoding="utf-8", errors="replace")
 
 # Ensure offline operation and 8-thread parallelism for CPU embedding acceleration
 os.environ["HF_HUB_OFFLINE"] = "1"
@@ -214,7 +214,8 @@ def load_protocol_chunks() -> List[Dict[str, Any]]:
         return []
 
     with open(protocol_path, "r", encoding="utf-8") as f:
-        proto = yaml.safe_load(f)
+        proto_raw = yaml.safe_load(f)
+    proto = proto_raw if isinstance(proto_raw, dict) else {}
 
     version = str(proto.get("version", "1.0.0"))
     rev_date = str(proto.get("last_reviewed_date", "2026-08-20"))
@@ -240,11 +241,11 @@ def load_protocol_chunks() -> List[Dict[str, Any]]:
 
     # 2. Substance protocols
     substances = proto.get("substance_protocols", {})
-    if "button_battery" in substances:
+    if isinstance(substances, dict) and "button_battery" in substances:
         bb = substances["button_battery"]
-        hp = bb.get("honey_protocol", {})
+        hp = bb.get("honey_protocol", {}) if isinstance(bb, dict) else {}
         bb_text = (
-            f"CLINICAL PROTOCOL: Button Battery Ingestion. Emergency: {bb.get('emergency')}. "
+            f"CLINICAL PROTOCOL: Button Battery Ingestion. Emergency: {bb.get('emergency') if isinstance(bb, dict) else 'true'}. "
             f"Pre-hospital honey protocol: {hp.get('dose_ml')}mL every {hp.get('frequency_minutes')}min "
             f"(max {hp.get('max_doses')} doses) ONLY if age>={hp.get('eligible_min_age_months')}mo "
             f"and ingestion<{hp.get('eligible_max_hours_since_ingestion')}h. Warning: {hp.get('warning')}. "
@@ -262,9 +263,9 @@ def load_protocol_chunks() -> List[Dict[str, Any]]:
             last_reviewed_date=rev_date,
         ))
 
-    if "paracetamol_overdose" in substances:
+    if isinstance(substances, dict) and "paracetamol_overdose" in substances:
         para = substances["paracetamol_overdose"]
-        p_text = f"CLINICAL PROTOCOL: Paracetamol Overdose. Emergency: {para.get('emergency')}. Antidote: {para.get('antidote')} (most effective within {para.get('time_window_hours')} hours of ingestion)."
+        p_text = f"CLINICAL PROTOCOL: Paracetamol Overdose. Emergency: {para.get('emergency') if isinstance(para, dict) else 'true'}. Antidote: {para.get('antidote') if isinstance(para, dict) else 'NAC'} (most effective within {para.get('time_window_hours') if isinstance(para, dict) else '8'} hours of ingestion)."
         chunks.extend(build_parent_child_hierarchy(
             filename="clinical_protocol.yaml",
             text=p_text,
@@ -283,32 +284,6 @@ def load_protocol_chunks() -> List[Dict[str, Any]]:
 # ─────────────────────────────────────────────────────────────────────────────
 # INGESTION & DATABASE SYNC
 # ─────────────────────────────────────────────────────────────────────────────
-
-def load_and_chunk_files(knowledge_dir: Path) -> List[Dict[str, Any]]:
-    """Reads PDFs and TXT files recursively, excluding duplicate copies."""
-    all_chunks = []
-    
-    # First, ingest the authoritative clinical_protocol.yaml
-    protocol_chunks = load_protocol_chunks()
-    all_chunks.extend(protocol_chunks)
-    print(f"  [PROTOCOL] Loaded {len(protocol_chunks)} structured reference chunks from clinical_protocol.yaml")
-
-    txt_files = list(knowledge_dir.rglob("*.txt"))
-    pdf_files = list(knowledge_dir.rglob("*.pdf"))
-    raw_files = sorted(txt_files + pdf_files)
-
-    # Filter duplicate file versions (e.g. "Betts... (1).pdf")
-    seen_bases = set()
-    filtered_files = []
-    for f in raw_files:
-        if f.name.startswith(".~lock") or f.name.startswith("~$") or f.name.endswith("#"):
-            continue
-        base_name = re.sub(r"\s*\(\d+\)", "", f.stem).strip()
-        if base_name in seen_bases:
-            print(f"  [DEDUP] Skipping duplicate file copy: {f.name}")
-            continue
-        seen_bases.add(base_name)
-        filtered_files.append(f)
 
 def process_and_index_file(
     file_path: Path,

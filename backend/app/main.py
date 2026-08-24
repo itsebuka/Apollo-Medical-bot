@@ -26,7 +26,7 @@ import copy
 from contextlib import asynccontextmanager
 import contextlib
 import sys
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
 try:
     from app import config  # type: ignore
@@ -204,7 +204,7 @@ async def lifespan(app: FastAPI):
             fallback_config = {**config.LLM_CONFIG, "flash_attn": False, "use_mmap": True}
             config.llm_instance = Llama(
                 model_path=str(config.MODEL_PATH),
-                **fallback_config,
+                **fallback_config,  # type: ignore
             )
             logger.info(f"LLM loaded (fallback config) in {time.time() - t:.1f}s ✓")
         except Exception as e2:
@@ -646,7 +646,7 @@ def _sync_candidate_retrieval(
                 has_age_band = "age_band" in cols
 
                 sql_where = ["chunks MATCH ?"]
-                params = [fts_and_query]
+                params: list[Any] = [fts_and_query]
 
                 if has_domain and domain_filter and domain_filter.lower() not in ('all', ''):
                     sql_where.append("domain = ?")
@@ -1166,7 +1166,7 @@ async def chat(request: ChatRequest):
         # Apply the full deterministic pipeline to the fully assembled response
         raw_full = "".join(full_response_parts)
         if raw_full.strip():
-            chunk_ids = [c.get("id", c.get("source", "chk")) for c in context_chunks]
+            chunk_ids: list[str] = [str(c.get("id", c.get("source", "chk"))) for c in context_chunks]
             if request.mode == "research":
                 scrubbed = clean_research_output(raw_full)
             else:

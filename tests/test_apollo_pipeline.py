@@ -1,4 +1,4 @@
-"""
+r"""
 Apollo Clinical Triage — Regression Test Suite
 ===============================================
 Tests the deterministic pipeline (pipeline.py) in isolation.
@@ -106,6 +106,7 @@ class TestAgeExtraction:
 
     def test_weeks_to_months(self):
         result = extract_age_months("4 week old newborn")
+        assert result is not None
         assert 0 <= result <= 2  # ~1 month
 
     def test_newborn(self):
@@ -151,6 +152,7 @@ class TestAgeBandBoundaries:
     def test_age_6_months_uses_correct_threshold(self):
         """test_age_band_6mo_uses_correct_threshold — regression for age-band mismatch bug."""
         band = get_age_band(6, self.protocol)
+        assert band is not None
         assert band["fast_breathing_threshold"] == 50  # NOT 60 (neonatal)
 
 
@@ -423,6 +425,7 @@ class TestBatteryIngestion:
 
     def test_no_induce_vomiting_in_battery_protocol(self):
         sq = preprocess_query("My 2-year-old ate a button battery")
+        assert sq.substance_protocol is not None
         assert sq.substance_protocol.get("induce_vomiting") is False
 
 

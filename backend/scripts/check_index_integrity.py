@@ -14,7 +14,7 @@ import chromadb
 import yaml
 
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    getattr(sys.stdout, "reconfigure")(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).parent.parent.parent
 CONFIG_PATH = ROOT / "config" / "clinical_protocol.yaml"
@@ -35,7 +35,8 @@ def check_integrity() -> bool:
         
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         proto = yaml.safe_load(f)
-    active_version = str(proto.get("version", "1.0.0"))
+    proto_dict = proto if isinstance(proto, dict) else {}
+    active_version = str(proto_dict.get("version", "1.0.0"))
     print(f"✓ Active Protocol Version from YAML: v{active_version}")
 
     # 2. Check SQLite FTS5 Table Schema & Document Versions
@@ -73,8 +74,8 @@ def check_integrity() -> bool:
             
             if total_count > 0:
                 results = col.get(where={"source_doc": "clinical_protocol.yaml"}, include=["metadatas"])
-                metas = results.get("metadatas", [])
-                versions = set(m.get("source_version") for m in metas if m.get("source_version"))
+                metas = results.get("metadatas") or []
+                versions = set(m.get("source_version") for m in metas if isinstance(m, dict) and m.get("source_version"))
                 if len(versions) > 1:
                     print(f"❌ INTEGRITY VIOLATION: Multiple versions of clinical_protocol.yaml found in ChromaDB: {versions}")
                     passed = False

@@ -27,7 +27,7 @@ import time
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 
 try:
     import yaml
@@ -74,10 +74,10 @@ determine the exact cause. This cannot be determined safely without in-person \
 examination.\
 """
 
-_protocol_cache: dict | None = None
+_protocol_cache: dict[str, Any] | None = None
 
 
-def load_clinical_protocol() -> dict:
+def load_clinical_protocol() -> dict[str, Any]:
     """Load and cache clinical_protocol.yaml. Single source of truth for all
     clinical thresholds. Raises FileNotFoundError if config is missing."""
     global _protocol_cache
@@ -91,7 +91,8 @@ def load_clinical_protocol() -> dict:
         )
 
     with open(PROTOCOL_PATH, "r", encoding="utf-8") as f:
-        _protocol_cache = yaml.safe_load(f)
+        loaded = yaml.safe_load(f)
+        _protocol_cache = loaded if isinstance(loaded, dict) else {}
 
     logger.info(
         "[PROTOCOL] Loaded clinical_protocol.yaml v%s "
